@@ -8,9 +8,9 @@ require('dotenv').config();
 const dropboxV2Api = require('dropbox-v2-api');
 
 const dropbox = dropboxV2Api.authenticate({
-    token: 'sl.BUHeXFmnGY-3eo4FwM4G6OlIY9A_OuIOuLD1B2iIgqWonenNZvwdILqfee3rpjsGl5Qd9P1oZoUKxi_BO8bzXcoHB8dK9mUAhf0dPqc2P0DYGMSM-0hgO9cOnDCJmY_ySaoAxffb',
-    client_id: 'chd4jap4680m01b',
-    client_secret: 'tcdwbbyvhe182ed',
+    token: process.env.token,
+    client_id: process.env.client_id,
+    client_secret: process.env.client_secret,
 });
 
 function getFolders(artist, album) {
@@ -109,37 +109,6 @@ fastify.get('/tracks/:artist/:album', async (request, reply) => {
         return { track_list: response };
     });
 });
-
-// fastify.post(
-//     '/track',
-//     {
-//         schema: {
-//             body: {
-//                 type: 'object',
-//                 properties: {
-//                     path: { type: 'string' },
-//                 },
-//             },
-//         },
-//     },
-//     (request, reply) => {
-//         let searchPath = '/music/alkaline trio/crimson [2005]/04 mercy me.mp3';
-//         reply.type('audio/mp3');
-//         reply.send(
-//             dropbox(
-//                 {
-//                     resource: 'files/download',
-//                     parameters: {
-//                         path: searchPath,
-//                     },
-//                 },
-//                 (err, result) => {
-//                     //download completed
-//                 }
-//             )
-//         );
-//     }
-// );
 
 fastify.get('/track', (request, reply) => {
     let searchPath = '/music/alkaline trio/crimson [2005]/04 mercy me.mp3';
