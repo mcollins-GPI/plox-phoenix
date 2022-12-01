@@ -3,6 +3,7 @@
 body {
     margin: 0;
     font-family: 'Karla', sans-serif;
+    overflow: hidden;
 }
 
 #media-picker {
@@ -74,4 +75,6 @@ body {
 
 #media-player {
     border-top: 1px solid grey;
+    overflow: auto;
+    height: 30vh;
 }
