@@ -1,0 +1,26 @@
+{
+    "name": "plox-phoenix",
+    "version": "1.0.0",
+    "description": "- https://github.com/jonathantneal/media-player\r - https://www.dropbox.com/developers/documentation/javascript#tutorial\r - https://www.fastify.io/\r - https://www.postgresql.org/\r - https://github.com/goldfire/howler.js#quick-start",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/mcollins-GPI/plox-phoenix.git"
+    },
+    "author": "",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/mcollins-GPI/plox-phoenix/issues"
+    },
+    "homepage": "https://github.com/mcollins-GPI/plox-phoenix#readme",
+    "dependencies": {
+        "@fastify/static": "^6.5.1",
+        "dotenv": "^16.0.3",
+        "dropbox-v2-api": "^2.5.7",
+        "fastify": "^4.10.2",
+        "howler": "^2.2.3"
+    }
+}
