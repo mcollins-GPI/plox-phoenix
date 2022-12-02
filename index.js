@@ -1,13 +1,7 @@
-const fs = require('fs');
-
-const fastify = require('fastify')({ logger: true });
-const fastifyStatic = require('@fastify/static');
-const { Readable } = require('stream');
-const path = require('path');
 require('dotenv').config();
+const fastify = require('fastify')({ logger: true });
 const dropboxV2Api = require('dropbox-v2-api');
 const open = require('open');
-
 const dropbox = dropboxV2Api.authenticate({
     client_id: process.env.client_id,
     client_secret: process.env.client_secret,
@@ -15,8 +9,6 @@ const dropbox = dropboxV2Api.authenticate({
     token_access_type: 'offline',
     state: 'OPTIONAL_STATE_VALUE',
 });
-//generate and visit authorization sevice
-let new_window = open(dropbox.generateAuthUrl());
 
 function getFolders(artist, album, metadata = false) {
     let fileList = [];
@@ -175,7 +167,6 @@ fastify.get('/track-info', async (request, reply) => {
         });
 });
 
-// // LAUNCH SERVER
 fastify.listen(
     { port: process.env.SERVER_PORT || 3000, host: process.env.SERVER_HOST || '0.0.0.0' },
     (err, address) => {
@@ -187,3 +178,6 @@ fastify.listen(
         console.info(`Server listening on ${address}`);
     }
 );
+
+//generate and visit authorization sevice
+open(dropbox.generateAuthUrl());
