@@ -95,42 +95,68 @@ function TrackListControl(attachPoint) {
     const self = this;
 
     this.populate = function (artist, album, tracks) {
-        const newAlbumTitle = document.createElement('h1');
+        const titleContainer = document.createElement('div');
+        const newAlbumTitle = document.createElement('div');
         const playAlbumButton = document.createElement('div');
-        const newTrackList = document.createElement('ul');
+        const addAlbumButton = document.createElement('div');
+        const newTrackList = document.createElement('table');
+        const trackHeader = document.createElement('thead');
+        const trackHeaderRow = document.createElement('tr');
+        const titleHeader = document.createElement('td');
+        const playHeader = document.createElement('td');
+        const addHeader = document.createElement('td');
+        const trackListing = document.createElement('tbody');
 
-        playAlbumButton.innerHTML = 'play stuff!';
+        titleHeader.innerHTML = 'Title';
+
+        trackHeaderRow.append(playHeader, addHeader, titleHeader);
+        trackHeader.append(trackHeaderRow);
+        newTrackList.append(trackHeader, trackListing);
+
+        titleContainer.className = 'title-container';
+        playAlbumButton.className = 'control';
+        playAlbumButton.innerHTML = 'PLAY!';
 
         playAlbumButton.addEventListener('click', () => {
             playlistControl.addTracks(artist, album, tracks);
         });
 
+        addAlbumButton.className = 'control';
+        addAlbumButton.innerHTML = 'ADD!';
+
+        addAlbumButton.addEventListener('click', () => {
+            playlistControl.addTracks(artist, album, tracks, false);
+        });
+
         newAlbumTitle.innerHTML = `${album.name}`;
+        newAlbumTitle.className = 'title-text';
+        newTrackList.className = 'table';
 
         tracks.forEach((track) => {
-            const listItem = document.createElement('li');
+            const listRow = document.createElement('tr');
+            const playItem = document.createElement('td');
+            const addItem = document.createElement('td');
+            const listItem = document.createElement('td');
+
+            playItem.innerHTML = 'play';
+            addItem.innerHTML = 'add';
             listItem.innerHTML = track.name;
 
-            listItem.addEventListener('click', (event) => {
-                fetch(`http://localhost/plox-phoenix/data/track`, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'text/plain;charset=UTF-8',
-                        path: track.path_lower,
-                    },
-                }).then((response) => {
-                    response.blob().then((myBlob) => {
-                        const objectURL = URL.createObjectURL(myBlob);
-                        audioController.src = objectURL;
-                    });
-                });
+            playItem.addEventListener('click', (event) => {
+                playlistControl.addTrack(artist, album, track);
             });
 
-            newTrackList.append(listItem);
+            addItem.addEventListener('click', (event) => {
+                playlistControl.addTrack(artist, album, track, false);
+            });
+
+            listRow.append(playItem, addItem, listItem);
+            trackListing.append(listRow);
         });
 
         self.clear();
-        attachPoint.append(newAlbumTitle, playAlbumButton, newTrackList);
+        titleContainer.append(newAlbumTitle, playAlbumButton, addAlbumButton);
+        attachPoint.append(titleContainer, newTrackList);
     };
     this.clear = function () {
         while (attachPoint.firstChild) {
@@ -146,12 +172,13 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
     const playlist = document.createElement('table');
     const trackHeader = document.createElement('thead');
     const trackHeaderRow = document.createElement('tr');
-    const trackListing = document.createElement('tbody');
     const numberHeader = document.createElement('td');
     const titleHeader = document.createElement('td');
     const artistHeader = document.createElement('td');
     const albumHeader = document.createElement('td');
+    const trackListing = document.createElement('tbody');
 
+    this.tracks = [];
     this.nextTrack = function () {
         // Check for last audio file in the playlist
         if (self.trackNumber === self.tracks.length - 1) {
@@ -161,16 +188,21 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
         }
 
         // Change the audio element source
+        self.play(self.tracks[self.trackNumber]);
+    };
+    this.previousTrack = function () {};
+    this.play = function (track) {
         fetch(`http://localhost/plox-phoenix/data/track`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'text/plain;charset=UTF-8',
-                path: self.tracks[self.trackNumber].path_lower,
+                path: track.path_lower,
             },
         }).then((response) => {
             response.blob().then((myBlob) => {
                 const objectURL = URL.createObjectURL(myBlob);
                 audioController.src = objectURL;
+
                 jsmediatags.read(myBlob, {
                     onSuccess: function (tag) {
                         console.log(tag);
@@ -188,7 +220,6 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
             });
         });
     };
-    this.previousTrack = function () {};
     this.addTrack = function (artist, album, track, index) {
         const trackRow = document.createElement('tr');
         const numberDescription = document.createElement('td');
@@ -196,7 +227,8 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
         const artistDescription = document.createElement('td');
         const albumDescription = document.createElement('td');
 
-        numberDescription.innerHTML = index + 1;
+        self.tracks.push(track);
+
         titleDescription.innerHTML = track.name;
         artistDescription.innerHTML = artist.name;
         albumDescription.innerHTML = album.name;
@@ -205,44 +237,32 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
         trackListing.append(trackRow);
 
         if (index === 0) {
+            numberDescription.innerHTML = index + 1;
             self.trackNumber = 0;
-            fetch(`http://localhost/plox-phoenix/data/track`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'text/plain;charset=UTF-8',
-                    path: track.path_lower,
-                },
-            }).then((response) => {
-                response.blob().then((myBlob) => {
-                    const objectURL = URL.createObjectURL(myBlob);
-                    audioController.src = objectURL;
-
-                    jsmediatags.read(myBlob, {
-                        onSuccess: function (tag) {
-                            console.log(tag);
-                            // title.innerHTML = tag.tags.title;
-                            // artist.innerHTML = tag.tags.artist;
-                            // album.innerHTML = tag.tags.album;
-                        },
-                        onError: function (error) {
-                            console.log(error);
-                            // title.innerHTML = 'no title info';
-                            // artist.innerHTML = 'no artist info';
-                            // album.innerHTML = 'no album info';
-                        },
-                    });
-                });
-            });
+            self.play(track);
+        } else {
+            numberDescription.innerHTML = self.tracks.length;
         }
     };
-    this.addTracks = function (artist, album, tracks) {
-        self.clearPlaylist();
-        self.tracks = tracks;
-        tracks.forEach((track, index) => {
-            self.addTrack(artist, album, track, index);
-        });
+    this.addTracks = function (artist, album, tracks, clearPlaylist = true) {
+        if (clearPlaylist) {
+            self.clearPlaylist();
+            tracks.forEach((track, index) => {
+                self.addTrack(artist, album, track, index);
+            });
+        } else {
+            let adjustedLength = self.tracks.length;
+            if (adjustedLength > 0) {
+                tracks.forEach((track, index) => {
+                    self.addTrack(artist, album, track, index + adjustedLength);
+                });
+            }
+        }
     };
     this.clearPlaylist = function () {
+        self.trackNumber = 0;
+        self.tracks = [];
+
         while (trackListing.firstChild) {
             trackListing.removeChild(trackListing.firstChild);
         }
