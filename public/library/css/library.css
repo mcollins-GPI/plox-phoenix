@@ -78,3 +78,33 @@ body {
     overflow: auto;
     height: 30vh;
 }
+
+#control-container {
+    margin: 5px;
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
+#playlist-controls .control {
+    cursor: pointer;
+    height: 54px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-content: center;
+    flex-direction: column;
+    background-color: rgba(0, 0, 0, 0.05);
+}
+#playlist-controls .control:hover {
+    background-color: rgba(255, 0, 0, 0.5);
+    transition: 500ms;
+}
+
+#playlist-controls .control span {
+    margin: 5px;
+}
+
+#playlist {
+    clear: both;
+}

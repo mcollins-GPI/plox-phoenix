@@ -16,7 +16,7 @@ const dropbox = dropboxV2Api.authenticate({
     state: 'OPTIONAL_STATE_VALUE',
 });
 //generate and visit authorization sevice
-open(dropbox.generateAuthUrl());
+let new_window = open(dropbox.generateAuthUrl());
 
 function getFolders(artist, album, metadata = false) {
     let fileList = [];
@@ -101,30 +101,29 @@ function getFileInfo(searchPath) {
     });
 }
 
+function refreshToken(token) {
+    dropbox.refreshToken(token, (err, result) => {
+        console.log(err);
+        console.log(result);
+        setTimeout(() => {
+            refreshToken(response.refreshToken);
+        }, response.expires_in * 1000);
+    });
+}
+
 fastify.get('/oauth', async function (request, reply) {
     var params = request.query;
 
     return new Promise((resolve) => {
         dropbox.getToken(params.code, function (err, response) {
-            // console.log(err);
-            // console.log("user's access_token: ", response.access_token);
-            // console.log("user's refresh_token: ", response.refresh_token);
-            // open('http://localhost/plox-phoenix/library')
-            //call api
-            // dropbox(
-            //     {
-            //         resource: 'users/get_current_account',
-            //     },
-            //     function (err, response) {
-            //         console.log(err);
-            //         resolve(response);
-            //     }
-            // );
-            //or refresh token!
-            // dropbox.refreshToken(response.refresh_token, (err, result) => {
-            //     console.log(err);
-            //     console.log(result);
-            // });
+            if (err) {
+                reply.send('Dropbox authentication unsuccessful!');
+            } else {
+                setTimeout(() => {
+                    refreshToken(response.refreshToken);
+                }, response.expires_in * 1000);
+                reply.send('Dropbox authentication successful!');
+            }
         });
     });
 });
