@@ -145,11 +145,11 @@ function TrackListControl(attachPoint) {
             listItem.innerHTML = track.name;
 
             playItem.addEventListener('click', (event) => {
-                playlistControl.addTrack(artist, album, track);
+                playlistControl.addTrack(artist, album, track, 0);
             });
 
             addItem.addEventListener('click', (event) => {
-                playlistControl.addTrack(artist, album, track, false);
+                playlistControl.addTrack(artist, album, track);
             });
 
             listRow.append(playItem, addItem, listItem);
