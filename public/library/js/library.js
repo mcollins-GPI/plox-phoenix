@@ -1,3 +1,5 @@
+// const baseURL = 'http://localhost/plox-phoenix/data';
+const baseURL = 'https://mcee.dev/dropsonic/data';
 const mediaPicker = document.getElementById('media-picker');
 const artistList = document.getElementById('artist-list');
 const albumList = document.getElementById('album-list');
@@ -25,7 +27,7 @@ function ArtistListControl(attachPoint) {
             const listItem = document.createElement('li');
             listItem.innerHTML = artist.name;
             listItem.addEventListener('click', (event) => {
-                fetch(`http://localhost/plox-phoenix/data/album`, {
+                fetch(baseURL + '/album', {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'text/plain;charset=UTF-8',
@@ -48,7 +50,7 @@ function ArtistListControl(attachPoint) {
         }
     };
 
-    fetch('http://localhost/plox-phoenix/data/artist')
+    fetch(baseURL + '/artist')
         .then((response) => response.json())
         .then((data) => self.populate(data.artist_list));
 }
@@ -67,7 +69,7 @@ function AlbumListControl(attachPoint) {
 
             // console.log(album);
             listItem.addEventListener('click', (event) => {
-                fetch(`http://localhost/plox-phoenix/data/tracks`, {
+                fetch(baseURL + '/tracks', {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'text/plain;charset=UTF-8',
@@ -192,7 +194,7 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
     };
     this.previousTrack = function () {};
     this.play = function (track) {
-        fetch(`http://localhost/plox-phoenix/data/track`, {
+        fetch(baseURL + '/track', {
             method: 'GET',
             headers: {
                 'Content-Type': 'text/plain;charset=UTF-8',
