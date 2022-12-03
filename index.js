@@ -1,169 +1,119 @@
 require('dotenv').config();
 const fastify = require('fastify')({ logger: true });
-const dropboxV2Api = require('dropbox-v2-api');
-const open = require('open');
-const dropbox = dropboxV2Api.authenticate({
-    client_id: process.env.client_id,
-    client_secret: process.env.client_secret,
-    redirect_uri: 'http://localhost/plox-phoenix/data/oauth',
-    token_access_type: 'offline',
-    state: 'OPTIONAL_STATE_VALUE',
+const { Dropbox } = require('dropbox');
+const dropbox = new Dropbox({
+    clientId: process.env.client_id,
+    clientSecret: process.env.client_secret,
+    refreshToken: process.env.refresh_token,
 });
 
-function getFolders(artist, album, metadata = false) {
+function getFolders(artist, album) {
     let fileList = [];
     let searchPath = `${artist ? `${album ? `/music/${artist}/${album}` : `/music/${artist}`}` : '/music'}`;
 
-    return new Promise((resolve, reject) => {
-        dropbox(
-            {
-                resource: 'files/list_folder',
-                parameters: { path: searchPath, include_media_info: metadata },
-            },
-            (err, result, response) => {
-                console.log(err, result, response);
-                if (err) reject(err);
-                if (result) {
-                    if (result.entries) fileList = fileList.concat(result.entries);
-
-                    //download completed
-                    if (result.has_more) {
-                        return getMoreFolders(result.cursor);
-                    } else {
-                        resolve(fileList);
-                    }
+    function getMoreFolders(cursor) {
+        return dropbox
+            .filesListFolderContinue({ cursor: cursor })
+            .then((response) => {
+                console.log(response);
+                if (response.result.entries) fileList = fileList.concat(response.result.entries);
+                if (response.result.has_more) {
+                    return getMoreFolders(response.result.cursor);
+                } else {
+                    return fileList;
                 }
+            })
+            .catch((err) => {
+                console.log(err);
+            });
+    }
+
+    return dropbox
+        .filesListFolder({ path: searchPath })
+        .then((response) => {
+            if (response.result.entries) fileList = fileList.concat(response.result.entries);
+            if (response.result.has_more) {
+                return getMoreFolders(response.result.cursor);
+            } else {
+                return fileList;
             }
-        );
-
-        function getMoreFolders(cursor) {
-            dropbox(
-                {
-                    resource: 'files/list_folder/continue',
-                    parameters: { cursor: cursor },
-                },
-                (err, result, response) => {
-                    if (err) reject(err);
-                    if (result) {
-                        if (result.entries) fileList = fileList.concat(result.entries);
-
-                        if (result.has_more) {
-                            return getMoreFolders(result.cursor);
-                        } else {
-                            resolve(fileList);
-                        }
-                    }
-                }
-            );
-        }
-    });
+        })
+        .catch((err) => {
+            console.log(err);
+        });
 }
 
 function getFile(searchPath) {
-    return dropbox(
-        {
-            resource: 'files/download',
-            parameters: {
-                path: searchPath,
-            },
-        },
-        (err, result) => {
-            //download completed
-        }
-    );
+    return dropbox
+        .filesDownload({ path: searchPath })
+        .then((response) => {
+            return response.result.fileBinary;
+        })
+        .catch((err) => {
+            console.log(err);
+        });
 }
 
 function getFileInfo(searchPath) {
-    return new Promise((resolve, reject) => {
-        dropbox(
-            {
-                resource: 'files/get_metadata',
-                parameters: {
-                    path: searchPath,
-                    include_deleted: true,
-                    include_has_explicit_shared_members: true,
-                    include_media_info: false,
-                },
-            },
-            (err, result) => {
-                if (err) reject(err);
-                resolve(result);
-            }
-        );
-    });
-}
-
-function refreshToken(token) {
-    dropbox.refreshToken(token, (err, result) => {
-        console.log(err);
-        console.log(result);
-        setTimeout(() => {
-            refreshToken(response.refreshToken);
-        }, response.expires_in * 1000);
-    });
-}
-
-fastify.get('/oauth', async function (request, reply) {
-    var params = request.query;
-
-    return new Promise((resolve) => {
-        dropbox.getToken(params.code, function (err, response) {
-            if (err) {
-                reply.send('Dropbox authentication unsuccessful!');
-            } else {
-                setTimeout(() => {
-                    refreshToken(response.refreshToken);
-                }, response.expires_in * 1000);
-                reply.send('Dropbox authentication successful!');
-            }
+    return dropbox
+        .filesGetMetadata({ path: searchPath, include_media_info: true })
+        .then((response) => {
+            return response;
+        })
+        .catch((err) => {
+            console.log(err);
         });
-    });
-});
+}
 
 fastify.get('/artist', async (request, reply) => {
     return getFolders()
         .then((response) => {
-            return { artist_list: response };
+            reply.send({ artist_list: response });
         })
         .catch((error) => {
-            return { error: error };
+            reply.send({ error: error });
         });
 });
 
 fastify.get('/album', async (request, reply) => {
-    console.log(request.headers.artist);
     return getFolders(request.headers.artist)
         .then((response) => {
-            return { album_list: response };
+            reply.send({ album_list: response });
         })
         .catch((error) => {
-            return { error: error };
+            reply.send({ error: error });
         });
 });
 
 fastify.get('/tracks', async (request, reply) => {
     return getFolders(request.headers.artist, request.headers.album, true)
         .then((response) => {
-            return { track_list: response };
+            reply.send({ track_list: response });
         })
         .catch((error) => {
-            return { error: error };
+            reply.send({ error: error });
         });
 });
 
-fastify.get('/track', (request, reply) => {
-    reply.type('application/octet-stream');
-    reply.send(getFile(request.headers.path));
+fastify.get('/track', async (request, reply) => {
+    return getFile(request.headers.path)
+        .then((response) => {
+            reply.type('application/octet-stream');
+            reply.send(response);
+        })
+        .catch((error) => {
+            reply.send({ error: error });
+        });
 });
 
 fastify.get('/track-info', async (request, reply) => {
     getFileInfo(request.headers.path)
         .then((fileInfo) => {
             reply.header('Content-Type', 'application/json; charset=utf-8');
-            reply.send(fileInfo);
+            reply.send({ file_info: fileInfo });
         })
         .catch((error) => {
-            reply.send(error);
+            reply.send({ error: error });
         });
 });
 
@@ -178,6 +128,3 @@ fastify.listen(
         console.info(`Server listening on ${address}`);
     }
 );
-
-//generate and visit authorization sevice
-open(dropbox.generateAuthUrl());
