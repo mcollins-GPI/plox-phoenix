@@ -1,5 +1,5 @@
-// const baseURL = 'http://localhost/plox-phoenix/data';
-const baseURL = 'https://mcee.dev/dropsonic/data';
+const baseURL = 'http://localhost/plox-phoenix/data';
+// const baseURL = 'https://mcee.dev/dropsonic/data';
 const mediaPicker = document.getElementById('media-picker');
 const artistList = document.getElementById('artist-list');
 const albumList = document.getElementById('album-list');

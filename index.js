@@ -65,6 +65,10 @@ function getFileInfo(searchPath) {
         });
 }
 
+fastify.get('/', async (request, reply) => {
+    reply.send('hello, world!');
+});
+
 fastify.get('/artist', async (request, reply) => {
     return getFolders()
         .then((response) => {
