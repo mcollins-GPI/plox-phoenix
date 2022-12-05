@@ -7,7 +7,6 @@ const trackList = document.getElementById('track-list');
 const mediaPlayer = document.getElementById('media-player');
 const playList = document.getElementById('playlist');
 const playlistControls = document.getElementById('playlist-controls');
-
 const audioController = document.getElementById('audio-controller');
 const artistListControl = new ArtistListControl(artistList);
 const albumListControl = new AlbumListControl(albumList);
@@ -18,15 +17,21 @@ function ArtistListControl(attachPoint) {
     const self = this;
 
     this.populate = function (artists) {
-        const newArtistTitle = document.createElement('h1');
-        const newArtistList = document.createElement('ul');
+        const collectionSummary = document.getElementById('collection-summary');
+        const artistList = document.getElementById('artist-list');
 
-        newArtistTitle.innerHTML = `Artists (${artists.length})`;
+        const artistTable = document.createElement('table');
+        const artistListing = document.createElement('tbody');
+
+        artistTable.className = 'table';
+        collectionSummary.innerHTML = `Artists (${artists.length})`;
 
         artists.forEach((artist) => {
-            const listItem = document.createElement('li');
-            listItem.innerHTML = artist.name;
-            listItem.addEventListener('click', (event) => {
+            const artistRow = document.createElement('tr');
+            const artistItem = document.createElement('td');
+            artistRow.className = 'artist-row';
+            artistItem.innerHTML = artist.name;
+            artistRow.addEventListener('click', (event) => {
                 fetch(baseURL + '/album', {
                     method: 'GET',
                     headers: {
@@ -38,15 +43,18 @@ function ArtistListControl(attachPoint) {
                     .then((data) => albumListControl.populate(artist, data.album_list));
             });
 
-            newArtistList.append(listItem);
+            artistRow.append(artistItem);
+            artistListing.append(artistRow);
         });
 
         self.clear();
-        attachPoint.append(newArtistTitle, newArtistList);
+        artistTable.append(artistListing);
+        artistList.append(artistTable);
     };
     this.clear = function () {
-        while (attachPoint.firstChild) {
-            attachPoint.removeChild(attachPoint.firstChild);
+        const artistList = document.getElementById('artist-list');
+        while (artistList.firstChild) {
+            artistList.removeChild(artistList.firstChild);
         }
     };
 
@@ -58,17 +66,20 @@ function AlbumListControl(attachPoint) {
     const self = this;
 
     this.populate = function (artist, albums) {
-        const newAlbumTitle = document.createElement('h1');
-        const newAlbumList = document.createElement('ul');
+        const artistSummary = document.getElementById('artist-summary');
+        const albumList = document.getElementById('album-list');
+        const albumTable = document.createElement('table');
+        const albumListing = document.createElement('tbody');
 
-        newAlbumTitle.innerHTML = `${artist.name}`;
-
+        albumTable.className = 'table';
+        artistSummary.innerHTML = `${artist.name}`;
         albums.forEach((album) => {
-            const listItem = document.createElement('li');
-            listItem.innerHTML = album.name;
+            const albumRow = document.createElement('tr');
+            const albumItem = document.createElement('td');
 
-            // console.log(album);
-            listItem.addEventListener('click', (event) => {
+            albumRow.className = 'album-row';
+            albumItem.innerHTML = album.name;
+            albumRow.addEventListener('click', (event) => {
                 fetch(baseURL + '/tracks', {
                     method: 'GET',
                     headers: {
@@ -81,15 +92,18 @@ function AlbumListControl(attachPoint) {
                     .then((data) => trackListControl.populate(artist, album, data.track_list));
             });
 
-            newAlbumList.append(listItem);
+            albumRow.append(albumItem);
+            albumListing.append(albumRow);
         });
 
         self.clear();
-        attachPoint.append(newAlbumTitle, newAlbumList);
+        albumTable.append(albumListing);
+        albumList.append(albumTable);
     };
     this.clear = function () {
-        while (attachPoint.firstChild) {
-            attachPoint.removeChild(attachPoint.firstChild);
+        const albumList = document.getElementById('album-list');
+        while (albumList.firstChild) {
+            albumList.removeChild(albumList.firstChild);
         }
     };
 }

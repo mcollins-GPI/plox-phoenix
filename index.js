@@ -1,11 +1,12 @@
 require('dotenv').config();
-const fastify = require('fastify')({ logger: true });
+const fastify = require('fastify')({ logger: false });
 const { Dropbox } = require('dropbox');
 const dropbox = new Dropbox({
     clientId: process.env.client_id,
     clientSecret: process.env.client_secret,
     refreshToken: process.env.refresh_token,
 });
+const cachedInformation = {};
 
 function getFolders(artist, album) {
     let fileList = [];
@@ -70,8 +71,21 @@ fastify.get('/', async (request, reply) => {
 });
 
 fastify.get('/artist', async (request, reply) => {
+    reply.send({ artist_list: cachedInformation.artist_list });
+    // return getFolders()
+    //     .then((response) => {
+    //         reply.send({ artist_list: response });
+    //     })
+    //     .catch((error) => {
+    //         reply.send({ error: error });
+    //     });
+});
+
+fastify.get('/refresh-artist', async (request, reply) => {
     return getFolders()
         .then((response) => {
+            cachedInformation.artist_list = response;
+
             reply.send({ artist_list: response });
         })
         .catch((error) => {
@@ -121,14 +135,23 @@ fastify.get('/track-info', async (request, reply) => {
         });
 });
 
-fastify.listen(
-    { port: process.env.SERVER_PORT || 3000, host: process.env.SERVER_HOST || '0.0.0.0' },
-    (err, address) => {
-        if (err) {
-            console.log(err);
-            process.exit(1);
-        }
+getFolders()
+    .then((response) => {
+        cachedInformation.artist_list = response;
+        console.log('artists loaded!');
 
-        console.info(`Server listening on ${address}`);
-    }
-);
+        fastify.listen(
+            { port: process.env.SERVER_PORT || 3000, host: process.env.SERVER_HOST || '0.0.0.0' },
+            (err, address) => {
+                if (err) {
+                    console.log(err);
+                    process.exit(1);
+                }
+
+                console.info(`Server listening on ${address}`);
+            }
+        );
+    })
+    .catch((error) => {
+        reply.send({ error: error });
+    });
