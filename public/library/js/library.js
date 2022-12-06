@@ -17,20 +17,88 @@ function ArtistListControl(attachPoint) {
     const self = this;
 
     this.populate = function (artists) {
-        const collectionSummary = document.getElementById('collection-summary');
+        const artistsSorted = artists
+            .filter((artist) => {
+                return artist['.tag'] === 'folder';
+            })
+            .sort((a, b) => {
+                const nameA = a.name.toUpperCase(); // ignore upper and lowercase
+                const nameB = b.name.toUpperCase(); // ignore upper and lowercase
+                if (nameA < nameB) {
+                    return -1;
+                }
+                if (nameA > nameB) {
+                    return 1;
+                }
+
+                // names must be equal
+                return 0;
+            });
+
+        const artistCount = document.getElementById('artist-count');
         const artistList = document.getElementById('artist-list');
+        const assortedArtists = document.createDocumentFragment();
+        const artistNavigation = document.querySelectorAll('.artist-navigation');
 
         const artistTable = document.createElement('table');
         const artistListing = document.createElement('tbody');
+        const letterShortcuts = [];
+        const alphaShortcuts = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '@', '!', '+', '('];
 
         artistTable.className = 'table';
-        collectionSummary.innerHTML = `Artists (${artists.length})`;
+        artistCount.innerHTML = `Artists (${artistsSorted.length})`;
 
-        artists.forEach((artist) => {
+        const assortedShortcutRow = document.createElement('tr');
+        const assortedShortcutItem = document.createElement('td');
+        const assortedLetterLink = document.createElement('div');
+
+        assortedLetterLink.className = 'letter-link';
+        assortedLetterLink.innerHTML = '@';
+        artistNavigation[0].append(assortedLetterLink);
+
+        assortedShortcutRow.id = `shortcut-assorted`;
+        assortedShortcutRow.className = 'artist-list-shortcut';
+        assortedShortcutItem.innerHTML = 'Assorted!';
+        assortedShortcutRow.append(assortedShortcutItem);
+        assortedLetterLink.addEventListener('click', () => {
+            assortedShortcutRow.scrollIntoView({ behavior: 'smooth' });
+        });
+
+        artistsSorted.forEach((artist) => {
             const artistRow = document.createElement('tr');
             const artistItem = document.createElement('td');
+            const artistFirstLetter = artist.name.slice(0, 1).toUpperCase();
+
+            if (!letterShortcuts.includes(artistFirstLetter)) {
+                if (!alphaShortcuts.includes(artistFirstLetter)) {
+                    const shortcutRow = document.createElement('tr');
+                    const shortcutItem = document.createElement('td');
+                    const letterLink = document.createElement('div');
+                    letterLink.className = 'letter-link';
+                    letterLink.innerHTML = artistFirstLetter;
+                    letterLink.href = `#shortcut-${artistFirstLetter}`;
+
+                    letterShortcuts.push(artistFirstLetter);
+
+                    if (letterShortcuts.length > 13) {
+                        artistNavigation[1].append(letterLink);
+                    } else {
+                        artistNavigation[0].append(letterLink);
+                    }
+
+                    shortcutRow.id = `shortcut-${artistFirstLetter}`;
+                    shortcutRow.className = 'artist-list-shortcut';
+                    letterLink.addEventListener('click', () => {
+                        shortcutRow.scrollIntoView({ behavior: 'smooth' });
+                    });
+
+                    shortcutItem.innerHTML = artistFirstLetter;
+                    shortcutRow.append(shortcutItem);
+                    artistListing.append(shortcutRow);
+                }
+            }
+
             artistRow.className = 'artist-row';
-            artistItem.innerHTML = artist.name;
             artistRow.addEventListener('click', (event) => {
                 fetch(baseURL + '/album', {
                     method: 'GET',
@@ -42,10 +110,17 @@ function ArtistListControl(attachPoint) {
                     .then((response) => response.json())
                     .then((data) => albumListControl.populate(artist, data.album_list));
             });
-
+            artistItem.innerHTML = artist.name;
             artistRow.append(artistItem);
-            artistListing.append(artistRow);
+
+            if (!alphaShortcuts.includes(artistFirstLetter)) {
+                artistListing.append(artistRow);
+            } else {
+                assortedArtists.append(artistRow);
+            }
         });
+
+        artistListing.prepend(assortedShortcutRow, assortedArtists);
 
         self.clear();
         artistTable.append(artistListing);
@@ -154,6 +229,7 @@ function TrackListControl(attachPoint) {
             const addItem = document.createElement('td');
             const listItem = document.createElement('td');
 
+            listRow.className = 'track-row';
             playItem.innerHTML = 'play';
             addItem.innerHTML = 'add';
             listItem.innerHTML = track.name;
