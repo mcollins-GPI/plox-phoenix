@@ -10,6 +10,7 @@
     -   fixed header
     -   fixed height
     -   play and add icons
+    -   adding multiple albums causes weird behavior in playback (starts with first album added)
 -   media section
     -   now playing information
     -   row highlight for currently playing song

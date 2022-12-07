@@ -184,46 +184,57 @@ function AlbumListControl(attachPoint) {
 }
 function TrackListControl(attachPoint) {
     const self = this;
+    const imageFileTypes = ['.jpg', '.png'];
 
     this.populate = function (artist, album, tracks) {
-        const titleContainer = document.createElement('div');
-        const newAlbumTitle = document.createElement('div');
-        const playAlbumButton = document.createElement('div');
-        const addAlbumButton = document.createElement('div');
+        const filteredTracks = tracks.filter((track) => {
+            imageFileTypes.forEach((imageFileType) => {
+                if (track.name.endsWith(imageFileType)) {
+                    return false;
+                }
+            });
+            return true;
+        });
+        const albumTitle = document.getElementById('album-title');
+        const albumPlay = document.getElementById('album-play');
+        const albumAdd = document.getElementById('album-add');
+        const trackList = document.getElementById('track-list');
+
         const newTrackList = document.createElement('table');
         const trackHeader = document.createElement('thead');
         const trackHeaderRow = document.createElement('tr');
-        const titleHeader = document.createElement('td');
-        const playHeader = document.createElement('td');
-        const addHeader = document.createElement('td');
+        const titleHeader = document.createElement('th');
+        const playHeader = document.createElement('th');
+        const addHeader = document.createElement('th');
         const trackListing = document.createElement('tbody');
 
+        albumTitle.innerHTML = `${album.name}`;
+        albumTitle.className = 'title-text';
+        playHeader.innerHTML = 'play';
+        addHeader.innerHTML = 'add';
         titleHeader.innerHTML = 'Title';
 
         trackHeaderRow.append(playHeader, addHeader, titleHeader);
         trackHeader.append(trackHeaderRow);
         newTrackList.append(trackHeader, trackListing);
 
-        titleContainer.className = 'title-container';
-        playAlbumButton.className = 'control';
-        playAlbumButton.innerHTML = 'PLAY!';
+        albumPlay.className = 'control';
+        albumPlay.innerHTML = 'PLAY!';
 
-        playAlbumButton.addEventListener('click', () => {
+        albumPlay.addEventListener('click', () => {
             playlistControl.addTracks(artist, album, tracks);
         });
 
-        addAlbumButton.className = 'control';
-        addAlbumButton.innerHTML = 'ADD!';
+        albumAdd.className = 'control';
+        albumAdd.innerHTML = 'ADD!';
 
-        addAlbumButton.addEventListener('click', () => {
+        albumAdd.addEventListener('click', () => {
             playlistControl.addTracks(artist, album, tracks, false);
         });
 
-        newAlbumTitle.innerHTML = `${album.name}`;
-        newAlbumTitle.className = 'title-text';
         newTrackList.className = 'table';
 
-        tracks.forEach((track) => {
+        filteredTracks.forEach((track) => {
             const listRow = document.createElement('tr');
             const playItem = document.createElement('td');
             const addItem = document.createElement('td');
@@ -247,12 +258,14 @@ function TrackListControl(attachPoint) {
         });
 
         self.clear();
-        titleContainer.append(newAlbumTitle, playAlbumButton, addAlbumButton);
-        attachPoint.append(titleContainer, newTrackList);
+
+        trackList.append(newTrackList);
     };
     this.clear = function () {
-        while (attachPoint.firstChild) {
-            attachPoint.removeChild(attachPoint.firstChild);
+        const trackList = document.getElementById('track-list');
+
+        while (trackList.firstChild) {
+            trackList.removeChild(trackList.firstChild);
         }
     };
 }

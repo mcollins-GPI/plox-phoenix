@@ -107,24 +107,25 @@ body {
     transition: 500ms;
 }
 
-#track-list {
+#track-section {
+    display: flex;
+    flex-direction: column;
     flex: auto;
-    overflow-y: scroll;
-    overflow-x: hidden;
+    overflow: hidden;
 }
 
-#track-list .title-container {
+#track-section .title-container {
     padding: 0 10px;
     display: flex;
     gap: 5px;
     align-items: center;
 }
 
-#track-list .title-container .title-text {
+#track-section .title-container .title-text {
     font-size: 2.5rem;
 }
 
-#track-list .control {
+#track-section .control {
     cursor: pointer;
     height: 54px;
     width: 54px;
@@ -135,15 +136,26 @@ body {
     flex-direction: column;
     background-color: rgba(0, 0, 0, 0.05);
 }
-#track-list .control:hover {
+#track-section .control:hover {
     background-color: rgba(255, 0, 0, 0.5);
     transition: 500ms;
 }
 
-#track-list .track-row {
+#track-list {
+    overflow-y: scroll;
+    flex: auto;
+}
+
+#track-list thead {
+    position: sticky;
+    top: 0;
+    background-color: rgba(200, 200, 200);
+}
+
+#track-section .track-row {
     cursor: pointer;
 }
-#track-list .track-row:hover {
+#track-section .track-row:hover {
     background-color: rgba(255, 0, 0, 0.5);
     transition: 500ms;
 }
