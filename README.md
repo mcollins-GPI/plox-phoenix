@@ -15,7 +15,7 @@
     -   better styled player
     -   remove track
     -   clear playlist
-    -   drag and drop reorder
+    -   [drag and drop reorder](https://codepen.io/chingy/pen/Exxvpjo)
 -   general
     -   La Troba Kung-Fú doesn't list albums
     -   Minnesota Orchestra; Osmo VaÌˆnskaÌˆ, conductor doesn't list albums
