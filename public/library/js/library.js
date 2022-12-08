@@ -243,6 +243,7 @@ function TrackListControl(attachPoint) {
             listItem.innerHTML = readableTrackName;
 
             playItem.addEventListener('click', (event) => {
+                playlistControl.clearPlaylist();
                 playlistControl.addTrack(artist, album, track, 0);
             });
 
