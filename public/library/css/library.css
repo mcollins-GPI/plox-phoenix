@@ -32,7 +32,7 @@ body {
     font-size: 2.75em;
     padding: 10px;
     gap: 5px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+    border-bottom: 1px solid #dee2e6;
 }
 
 .artist-navigation {
@@ -98,7 +98,7 @@ body {
 #artist-summary {
     font-size: 2.75em;
     padding: 0 10px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+    border-bottom: 1px solid #dee2e6;
 }
 
 #album-list {

@@ -117,6 +117,7 @@ class IOInterface(object):
 
         raise NotImplementedError
 
+
 def getMutagenTags(path):
     """"""
     audio = ID3.load(path)
@@ -130,7 +131,7 @@ url = "https://content.dropboxapi.com/2/files/download"
 
 # the range header is key to reducing the bandwidth requirement, and could be used in javascript request
 headers = {
-    "Authorization": "Bearer sl.BUj1QlhqS2jjmTfeIGTWvNozlZhOezfAoJ2wOGkdrY1kLtRtQNcSMuz95uJdakmW-fweZf3zVHSHK1Wn4zRQsm7qVdFjLH0dGetvhmFeZIQmYMgZ6YIDBDCHvwfGYiavA6kNmJiC",
+    "Authorization": "Bearer sl.BUlDhZkOPzqLQsOLrkoMgMiOcgqUUFMyJim1IRHAOk3zAeiUXQU4H2PsA_33_LMMk6LKl9tptZtDFa2rg5ndjBW3MPUIW2FvwoQWR9A627-wsg2uOkQ8nHo6ciuy_YXitSf_KFSI",
     "Dropbox-API-Arg": "{\"path\":\"/music/2 Chainz/Based On A T.R.U. Story (Deluxe) [2012]/02 Crack.mp3\"}",
     "Range": "bytes=0-1023"
 }

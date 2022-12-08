@@ -272,6 +272,10 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
     const controls = document.createElement('div');
     const nextButton = document.createElement('div');
     const nextButtonText = document.createElement('span');
+
+    const testButton = document.createElement('div');
+    const testButtonText = document.createElement('span');
+
     const playlist = document.createElement('table');
     const trackHeader = document.createElement('thead');
     const trackHeaderRow = document.createElement('tr');
@@ -396,8 +400,116 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
     nextButtonText.innerHTML = 'NEXT!';
     nextButton.append(nextButtonText);
 
+    testButton.classList = 'control';
+    testButton.addEventListener('click', (event) => {
+        //     var xhr = new XMLHttpRequest();
+        //     // xhr.responseType = 'octet-stream';
+        //     xhr.responseType = 'arraybuffer';
+
+        //     xhr.onload = async function () {
+        //         if (xhr.status === 200) {
+        //             // var blob = new Blob([xhr.response], { type: 'application/octet-stream' });
+        //             // console.log(blob);
+        //             console.log(xhr.response);
+
+        //             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        //             const source = audioCtx.createBufferSource();
+
+        //             // set the buffer in the AudioBufferSourceNode
+        //             source.buffer = xhr.response;
+
+        //             // connect the AudioBufferSourceNode to the
+        //             // destination so we can hear the sound
+        //             source.connect(audioCtx.destination);
+
+        //             // start the source playing
+        //             source.start();
+
+        //         } else {
+        //             var errorMessage = xhr.response || 'Unable to download file';
+        //             // Upload failed. Do something here with the error.
+        //         }
+        //     };
+
+        //     xhr.open('POST', 'https://content.dropboxapi.com/2/files/download');
+        //     xhr.setRequestHeader(
+        //         'Authorization',
+        //         'Bearer sl.BUnX0BZ37g6fIlQHgcXvX9ttGOzP8HoIhDOIyaYCmSCMDNBiFXpCo1H8fzVdPXtDbCSyFQzwPlrQLZ3e5ZOD-5LsPW5hJfHeJzKNwh2d2GPjYeE3KbFaoSzTfBjNooIEJIKX2lyV'
+        //     );
+        //     xhr.setRequestHeader(
+        //         'Dropbox-API-Arg',
+        //         JSON.stringify({
+        //             path: '/Music/LCD Soundsystem/45:33 [2007]/01 45-33.mp3',
+        //         })
+        //     );
+        //     xhr.send();
+
+        var headers = {
+            authorization:
+                'Bearer sl.BUlDhZkOPzqLQsOLrkoMgMiOcgqUUFMyJim1IRHAOk3zAeiUXQU4H2PsA_33_LMMk6LKl9tptZtDFa2rg5ndjBW3MPUIW2FvwoQWR9A627-wsg2uOkQ8nHo6ciuy_YXitSf_KFSI',
+            arg: '{"path":"/music/2 Chainz/Based On A T.R.U. Story (Deluxe) [2012]/02 Crack.mp3"}',
+            range: 'bytes=0-1023',
+        };
+        // var params = JSON.stringify({
+        //     id: 'id:LNWjzwt30FUAAAAAAABFkA',
+        // });
+
+        fetch('https://api.dropboxapi.com/2/file_requests/get', {
+            method: 'POST',
+            mode: 'no-cors', // no-cors, *cors, same-origin
+            // body: params,
+            headers: headers,
+        })
+            .then((res) => console.log(res))
+            // .then((data) => console.log('access data =>', data))
+            .catch((err) => console.log('access err =>', err));
+
+        // fetch('https://content.dropboxapi.com/2/files/download', {
+        //     method: 'POST', // *GET, POST, PUT, DELETE, etc.
+        //     mode: 'no-cors', // no-cors, *cors, same-origin
+        //     cache: 'default', // *default, no-cache, reload, force-cache, only-if-cached
+        //     credentials: 'same-origin', // include, *same-origin, omit
+        //     headers: {
+        //         Authorization:
+        //             'Bearer sl.BUnX0BZ37g6fIlQHgcXvX9ttGOzP8HoIhDOIyaYCmSCMDNBiFXpCo1H8fzVdPXtDbCSyFQzwPlrQLZ3e5ZOD-5LsPW5hJfHeJzKNwh2d2GPjYeE3KbFaoSzTfBjNooIEJIKX2lyV',
+        //     },
+        //     body: JSON.stringify({ path: '/music/LCD Soundsystem/45:33 [2007]/01 45-33.mp3' }),
+        //     redirect: 'follow', // manual, *follow, error
+        //     referrer: 'client', // no-referrer, *client
+        // })
+        //     .then((response) => {
+        //         console.log(response);
+        //         // reply.type('application/octet-stream');
+        //         // reply.send(response);
+
+        //         // const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+        //         // const url = window.URL.createObjectURL(blob);
+        //         // audioElement.src = url;
+        //         // if (response.status === 200) {
+        //         //     if (type === 'json') {
+        //         //         return response.json().then((data) => {
+        //         //             return data;
+        //         //         });
+        //         //     } else if (type === 'blob') {
+        //         //         return response;
+        //         //     }
+        //         // } else {
+        //         //     return Promise.resolve({
+        //         //         features: [],
+        //         //         type: 'FeatureCollection',
+        //         //     });
+        //         // }
+        //     })
+
+        //     .catch((error) => console.log(error));
+    });
+    testButtonText.innerHTML = 'STREAM!';
+    testButton.append(testButtonText);
+
     playlist.append(trackHeader, trackListing);
     controls.append(nextButton);
+    // controls.append(testButton);
 
     playlistAttachPoint.append(playlist);
     controlsAttachPoint.append(controls);

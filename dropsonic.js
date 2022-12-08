@@ -55,9 +55,9 @@ function getFile(searchPath) {
         });
 }
 
-function getFileInfo(searchPath) {
+function getFileHeader(searchPath) {
     return dropbox
-        .filesGetMetadata({ path: searchPath, include_media_info: true })
+        .filesDownload({ path: searchPath })
         .then((response) => {
             return response;
         })
@@ -134,6 +134,9 @@ fastify.get('/track-info', async (request, reply) => {
             reply.send({ error: error });
         });
 });
+
+
+
 
 getFolders()
     .then((response) => {
