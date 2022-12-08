@@ -7,24 +7,19 @@
     -   play and add icons
     -   sort albums by year (where possible)
 -   tracklist section
-    -   fixed header
-    -   fixed height
     -   play and add icons
-    -   adding multiple albums causes weird behavior in playback (starts with first album added)
 -   media section
     -   now playing information
-    -   row highlight for currently playing song
     -   three way repeat toggle button
     -   media control interface for player
     -   better styled player
     -   remove track
     -   clear playlist
     -   drag and drop reorder
-    -   player fixed to top
 -   general
-    -   no highlight on text
+    -   La Troba Kung-Fú doesn't list albums
+    -   Minnesota Orchestra; Osmo VaÌˆnskaÌˆ, conductor doesn't list albums
     -   better styling for buttons
-    -   filter out file types that are not audio
 
 ## resources
 

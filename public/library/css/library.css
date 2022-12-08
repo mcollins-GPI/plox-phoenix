@@ -6,6 +6,10 @@ body {
     overflow: hidden;
 }
 
+.hidden {
+    display: none !important;
+}
+
 #media-picker {
     display: flex;
     flex-direction: row;
@@ -43,8 +47,9 @@ body {
     cursor: pointer;
     flex: 1;
     text-align: center;
-    background-color: rgba(0, 0, 0, 0.25);
-    border-right: 1px solid grey;
+    background-color: rgba(0, 0, 0, 0.125);
+    border-right: 1px solid rgba(0, 0, 0, 0.25);
+    transition: 500ms;
 }
 
 .artist-navigation .letter-link:hover {
@@ -74,6 +79,7 @@ body {
 
 #artist-list .artist-row {
     cursor: pointer;
+    transition: 500ms;
 }
 #artist-list .artist-row:hover {
     background-color: rgba(255, 0, 0, 0.5);
@@ -101,6 +107,7 @@ body {
 
 #album-list .album-row {
     cursor: pointer;
+    transition: 500ms;
 }
 #album-list .album-row:hover {
     background-color: rgba(255, 0, 0, 0.5);
@@ -135,6 +142,7 @@ body {
     align-items: center;
     flex-direction: column;
     background-color: rgba(0, 0, 0, 0.05);
+    transition: 500ms;
 }
 #track-section .control:hover {
     background-color: rgba(255, 0, 0, 0.5);
@@ -146,14 +154,22 @@ body {
     flex: auto;
 }
 
+#track-list .table {
+    border-collapse: separate; /* Don't collapse */
+    border-spacing: 0;
+}
+
 #track-list thead {
     position: sticky;
     top: 0;
-    background-color: rgba(200, 200, 200);
+    background-color: white;
+
+    /* background-color: rgba(200, 200, 200); */
 }
 
 #track-section .track-row {
     cursor: pointer;
+    transition: 500ms;
 }
 #track-section .track-row:hover {
     background-color: rgba(255, 0, 0, 0.5);
@@ -162,8 +178,9 @@ body {
 
 #media-player {
     border-top: 1px solid rgba(0, 0, 0, 0.25);
-    overflow: auto;
     height: 40vh;
+    display: flex;
+    flex-direction: column;
 }
 
 #control-container {
@@ -185,7 +202,6 @@ body {
 }
 #playlist-controls .control:hover {
     background-color: rgba(255, 0, 0, 0.5);
-    transition: 500ms;
 }
 
 #playlist-controls .control span {
@@ -194,4 +210,46 @@ body {
 
 #playlist {
     clear: both;
+    flex: auto;
+    overflow: auto;
+}
+
+#playlist .table {
+    border-collapse: separate; /* Don't collapse */
+    border-spacing: 0;
+}
+
+#playlist thead {
+    position: sticky;
+    top: 0;
+    background-color: white;
+    z-index: 1;
+}
+
+#playlist .track-row {
+    transition: 500ms;
+}
+
+#playlist .track-row:hover {
+    background-color: rgba(255, 0, 0, 0.5);
+    transition: 500ms;
+}
+
+.playing {
+    transform: scale(1);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        background-color: rgba(255, 0, 0, 0);
+    }
+
+    50% {
+        background-color: rgba(255, 0, 0, 0.5);
+    }
+
+    100% {
+        background-color: rgba(255, 0, 0, 0);
+    }
 }

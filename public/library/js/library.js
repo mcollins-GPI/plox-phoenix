@@ -184,16 +184,15 @@ function AlbumListControl(attachPoint) {
 }
 function TrackListControl(attachPoint) {
     const self = this;
-    const imageFileTypes = ['.jpg', '.png'];
+    const nonMusicFileTypes = ['v1', 'txt', 'rar', 'm3u'];
+    const imageFileTypes = ['jpg', 'png'];
+    const fileTypesToExclude = [...nonMusicFileTypes, ...imageFileTypes];
 
     this.populate = function (artist, album, tracks) {
         const filteredTracks = tracks.filter((track) => {
-            imageFileTypes.forEach((imageFileType) => {
-                if (track.name.endsWith(imageFileType)) {
-                    return false;
-                }
-            });
-            return true;
+            let fileType = track.name.split('.').pop();
+
+            return !fileTypesToExclude.includes(fileType);
         });
         const albumTitle = document.getElementById('album-title');
         const albumPlay = document.getElementById('album-play');
@@ -218,19 +217,16 @@ function TrackListControl(attachPoint) {
         trackHeader.append(trackHeaderRow);
         newTrackList.append(trackHeader, trackListing);
 
-        albumPlay.className = 'control';
-        albumPlay.innerHTML = 'PLAY!';
+        albumPlay.classList.remove('hidden');
+        albumAdd.classList.remove('hidden');
 
-        albumPlay.addEventListener('click', () => {
-            playlistControl.addTracks(artist, album, tracks);
-        });
+        albumPlay.onclick = () => {
+            playlistControl.addTracks(artist, album, filteredTracks);
+        };
 
-        albumAdd.className = 'control';
-        albumAdd.innerHTML = 'ADD!';
-
-        albumAdd.addEventListener('click', () => {
-            playlistControl.addTracks(artist, album, tracks, false);
-        });
+        albumAdd.onclick = () => {
+            playlistControl.addTracks(artist, album, filteredTracks, false);
+        };
 
         newTrackList.className = 'table';
 
@@ -239,11 +235,12 @@ function TrackListControl(attachPoint) {
             const playItem = document.createElement('td');
             const addItem = document.createElement('td');
             const listItem = document.createElement('td');
+            const readableTrackName = track.name.split('.').slice(0, -1).join(' ');
 
             listRow.className = 'track-row';
             playItem.innerHTML = 'play';
             addItem.innerHTML = 'add';
-            listItem.innerHTML = track.name;
+            listItem.innerHTML = readableTrackName;
 
             playItem.addEventListener('click', (event) => {
                 playlistControl.addTrack(artist, album, track, 0);
@@ -308,6 +305,14 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
                 const objectURL = URL.createObjectURL(myBlob);
                 audioController.src = objectURL;
 
+                trackListing.querySelectorAll('tr').forEach((row, index) => {
+                    if (index === self.trackNumber) {
+                        row.classList.add('playing');
+                    } else {
+                        row.classList.remove('playing');
+                    }
+                });
+
                 jsmediatags.read(myBlob, {
                     onSuccess: function (tag) {
                         console.log(tag);
@@ -338,6 +343,7 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
         artistDescription.innerHTML = artist.name;
         albumDescription.innerHTML = album.name;
 
+        trackRow.className = 'track-row';
         trackRow.append(numberDescription, titleDescription, artistDescription, albumDescription);
         trackListing.append(trackRow);
 
