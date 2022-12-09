@@ -286,7 +286,7 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
     const trackListing = document.createElement('tbody');
 
     this.tracks = [];
-    this.nextTrack = function () {
+    this.nextTrack = function (mode) {
         // Check for last audio file in the playlist
         if (self.trackNumber === self.tracks.length - 1) {
             self.trackNumber = 0;
@@ -298,7 +298,18 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
         self.play(self.tracks[self.trackNumber]);
     };
     this.previousTrack = function () {};
+    this.pause = function () {
+        audioController.pause();
+    };
     this.play = function (track) {
+        trackListing.querySelectorAll('tr').forEach((row, index) => {
+            if (index === self.trackNumber) {
+                row.classList.add('playing');
+            } else {
+                row.classList.remove('playing');
+            }
+        });
+
         fetch(baseURL + '/track', {
             method: 'GET',
             headers: {
@@ -309,14 +320,6 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
             response.blob().then((myBlob) => {
                 const objectURL = URL.createObjectURL(myBlob);
                 audioController.src = objectURL;
-
-                trackListing.querySelectorAll('tr').forEach((row, index) => {
-                    if (index === self.trackNumber) {
-                        row.classList.add('playing');
-                    } else {
-                        row.classList.remove('playing');
-                    }
-                });
 
                 jsmediatags.read(myBlob, {
                     onSuccess: function (tag) {
@@ -395,6 +398,7 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
 
     nextButton.classList = 'control';
     nextButton.addEventListener('click', (event) => {
+        self.pause();
         self.nextTrack();
     });
     nextButtonText.innerHTML = 'NEXT!';
