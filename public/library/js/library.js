@@ -152,23 +152,27 @@ function AlbumListControl(attachPoint) {
             const albumRow = document.createElement('tr');
             const albumItem = document.createElement('td');
 
-            albumRow.className = 'album-row';
-            albumItem.innerHTML = album.name;
-            albumRow.addEventListener('click', (event) => {
-                fetch(baseURL + '/tracks', {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'text/plain;charset=UTF-8',
-                        artist: artist.name,
-                        album: album.name,
-                    },
-                })
-                    .then((response) => response.json())
-                    .then((data) => trackListControl.populate(artist, album, data.track_list));
-            });
+            if (album.name[0] === '.') {
+                console.log('hidden file: ' + album.name);
+            } else {
+                albumRow.className = 'album-row';
+                albumItem.innerHTML = album.name;
+                albumRow.addEventListener('click', (event) => {
+                    fetch(baseURL + '/tracks', {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'text/plain;charset=UTF-8',
+                            artist: artist.name,
+                            album: album.name,
+                        },
+                    })
+                        .then((response) => response.json())
+                        .then((data) => trackListControl.populate(artist, album, data.track_list));
+                });
 
-            albumRow.append(albumItem);
-            albumListing.append(albumRow);
+                albumRow.append(albumItem);
+                albumListing.append(albumRow);
+            }
         });
 
         self.clear();
@@ -191,8 +195,8 @@ function TrackListControl(attachPoint) {
     this.populate = function (artist, album, tracks) {
         const filteredTracks = tracks.filter((track) => {
             let fileType = track.name.split('.').pop();
-
-            return !fileTypesToExclude.includes(fileType);
+            // omit hidden files and excluded files from track list
+            return track.name[0] !== '.' && !fileTypesToExclude.includes(fileType);
         });
         const albumTitle = document.getElementById('album-title');
         const albumPlay = document.getElementById('album-play');
@@ -327,6 +331,96 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
                         // title.innerHTML = tag.tags.title;
                         // artist.innerHTML = tag.tags.artist;
                         // album.innerHTML = tag.tags.album;
+
+                        if ('mediaSession' in navigator) {
+                            navigator.mediaSession.metadata = new MediaMetadata({
+                                title: tag.tags.title,
+                                artist: tag.tags.artist,
+                                album: tag.tags.album,
+                                // artwork: [
+                                //     {
+                                //         src: 'https://assets.codepen.io/4358584/1.300.jpg',
+                                //         sizes: '96x96',
+                                //         type: 'image/png',
+                                //     },
+                                //     {
+                                //         src: 'https://assets.codepen.io/4358584/1.300.jpg',
+                                //         sizes: '128x128',
+                                //         type: 'image/png',
+                                //     },
+                                //     {
+                                //         src: 'https://assets.codepen.io/4358584/1.300.jpg',
+                                //         sizes: '192x192',
+                                //         type: 'image/png',
+                                //     },
+                                //     {
+                                //         src: 'https://assets.codepen.io/4358584/1.300.jpg',
+                                //         sizes: '256x256',
+                                //         type: 'image/png',
+                                //     },
+                                //     {
+                                //         src: 'https://assets.codepen.io/4358584/1.300.jpg',
+                                //         sizes: '384x384',
+                                //         type: 'image/png',
+                                //     },
+                                //     {
+                                //         src: 'https://assets.codepen.io/4358584/1.300.jpg',
+                                //         sizes: '512x512',
+                                //         type: 'image/png',
+                                //     },
+                                // ],
+                            });
+                            navigator.mediaSession.setActionHandler('play', () => {
+                                if (playState === 'play') {
+                                    audio.play();
+                                    playAnimation.playSegments([14, 27], true);
+                                    requestAnimationFrame(whilePlaying);
+                                    playState = 'pause';
+                                } else {
+                                    audio.pause();
+                                    playAnimation.playSegments([0, 14], true);
+                                    cancelAnimationFrame(raf);
+                                    playState = 'play';
+                                }
+                            });
+                            navigator.mediaSession.setActionHandler('pause', () => {
+                                if (playState === 'play') {
+                                    audio.play();
+                                    playAnimation.playSegments([14, 27], true);
+                                    requestAnimationFrame(whilePlaying);
+                                    playState = 'pause';
+                                } else {
+                                    audio.pause();
+                                    playAnimation.playSegments([0, 14], true);
+                                    cancelAnimationFrame(raf);
+                                    playState = 'play';
+                                }
+                            });
+                            navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+                                audio.currentTime = audio.currentTime - (details.seekOffset || 10);
+                            });
+                            navigator.mediaSession.setActionHandler('seekforward', (details) => {
+                                audio.currentTime = audio.currentTime + (details.seekOffset || 10);
+                            });
+                            navigator.mediaSession.setActionHandler('seekto', (details) => {
+                                if (details.fastSeek && 'fastSeek' in audio) {
+                                    audio.fastSeek(details.seekTime);
+                                    return;
+                                }
+                                audio.currentTime = details.seekTime;
+                            });
+                            navigator.mediaSession.setActionHandler('stop', () => {
+                                audio.currentTime = 0;
+                                seekSlider.value = 0;
+                                audioPlayerContainer.style.setProperty('--seek-before-width', '0%');
+                                currentTimeContainer.textContent = '0:00';
+                                if (playState === 'pause') {
+                                    playAnimation.playSegments([0, 14], true);
+                                    cancelAnimationFrame(raf);
+                                    playState = 'play';
+                                }
+                            });
+                        }
                     },
                     onError: function (error) {
                         console.log(error);
