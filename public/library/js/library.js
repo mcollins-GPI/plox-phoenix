@@ -372,51 +372,53 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
                             });
                             navigator.mediaSession.setActionHandler('play', () => {
                                 if (playState === 'play') {
-                                    audio.play();
-                                    playAnimation.playSegments([14, 27], true);
-                                    requestAnimationFrame(whilePlaying);
+                                    audioController.play();
+                                    // playAnimation.playSegments([14, 27], true);
+                                    // requestAnimationFrame(whilePlaying);
                                     playState = 'pause';
                                 } else {
-                                    audio.pause();
-                                    playAnimation.playSegments([0, 14], true);
-                                    cancelAnimationFrame(raf);
+                                    audioController.pause();
+                                    // playAnimation.playSegments([0, 14], true);
+                                    // cancelAnimationFrame(raf);
                                     playState = 'play';
                                 }
                             });
                             navigator.mediaSession.setActionHandler('pause', () => {
                                 if (playState === 'play') {
-                                    audio.play();
-                                    playAnimation.playSegments([14, 27], true);
-                                    requestAnimationFrame(whilePlaying);
+                                    audioController.play();
+                                    // playAnimation.playSegments([14, 27], true);
+                                    // requestAnimationFrame(whilePlaying);
                                     playState = 'pause';
                                 } else {
-                                    audio.pause();
-                                    playAnimation.playSegments([0, 14], true);
-                                    cancelAnimationFrame(raf);
+                                    audioController.pause();
+                                    // playAnimation.playSegments([0, 14], true);
+                                    // cancelAnimationFrame(raf);
                                     playState = 'play';
                                 }
                             });
                             navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-                                audio.currentTime = audio.currentTime - (details.seekOffset || 10);
+                                audioController.currentTime =
+                                    audioController.currentTime - (details.seekOffset || 10);
                             });
                             navigator.mediaSession.setActionHandler('seekforward', (details) => {
-                                audio.currentTime = audio.currentTime + (details.seekOffset || 10);
+                                audioController.currentTime =
+                                    audioController.currentTime + (details.seekOffset || 10);
                             });
                             navigator.mediaSession.setActionHandler('seekto', (details) => {
-                                if (details.fastSeek && 'fastSeek' in audio) {
-                                    audio.fastSeek(details.seekTime);
+                                if (details.fastSeek && 'fastSeek' in audioController) {
+                                    audioController.fastSeek(details.seekTime);
                                     return;
                                 }
-                                audio.currentTime = details.seekTime;
+                                audioController.currentTime = details.seekTime;
                             });
                             navigator.mediaSession.setActionHandler('stop', () => {
-                                audio.currentTime = 0;
-                                seekSlider.value = 0;
-                                audioPlayerContainer.style.setProperty('--seek-before-width', '0%');
-                                currentTimeContainer.textContent = '0:00';
+                                audioController.currentTime = 0;
+                                // seekSlider.value = 0;
+                                // audioPlayerContainer.style.setProperty('--seek-before-width', '0%');
+                                // currentTimeContainer.textContent = '0:00';
                                 if (playState === 'pause') {
-                                    playAnimation.playSegments([0, 14], true);
-                                    cancelAnimationFrame(raf);
+                                    // playAnimation.playSegments([0, 14], true);
+                                    // cancelAnimationFrame(raf);
                                     playState = 'play';
                                 }
                             });
@@ -450,6 +452,7 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
         trackListing.append(trackRow);
 
         if (index === 0) {
+            self.pause();
             numberDescription.innerHTML = index + 1;
             self.trackNumber = 0;
             self.play(track);
@@ -465,6 +468,7 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
             });
         } else {
             let adjustedLength = self.tracks.length;
+
             if (adjustedLength > 0) {
                 tracks.forEach((track, index) => {
                     self.addTrack(artist, album, track, index + adjustedLength);
