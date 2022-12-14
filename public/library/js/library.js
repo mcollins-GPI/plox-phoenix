@@ -22,8 +22,9 @@ function ArtistListControl(attachPoint) {
                 return artist['.tag'] === 'folder';
             })
             .sort((a, b) => {
-                const nameA = a.name.toUpperCase(); // ignore upper and lowercase
-                const nameB = b.name.toUpperCase(); // ignore upper and lowercase
+                let nameA = a.name.toUpperCase().replace(/^THE /g, ''); // ignore upper and lowercase
+                let nameB = b.name.toUpperCase().replace(/^THE /g, ''); // ignore upper and lowercase
+
                 if (nameA < nameB) {
                     return -1;
                 }
@@ -189,14 +190,14 @@ function AlbumListControl(attachPoint) {
 function TrackListControl(attachPoint) {
     const self = this;
     const nonMusicFileTypes = ['v1', 'txt', 'rar', 'm3u'];
-    const imageFileTypes = ['jpg', 'png'];
+    const imageFileTypes = ['jpg', 'jpeg', 'png'];
     const fileTypesToExclude = [...nonMusicFileTypes, ...imageFileTypes];
 
     this.populate = function (artist, album, tracks) {
         const filteredTracks = tracks.filter((track) => {
             let fileType = track.name.split('.').pop();
             // omit hidden files and excluded files from track list
-            return track.name[0] !== '.' && !fileTypesToExclude.includes(fileType);
+            return track.name[0] !== '.' && !fileTypesToExclude.includes(fileType.toLowerCase());
         });
         const albumTitle = document.getElementById('album-title');
         const albumPlay = document.getElementById('album-play');
@@ -288,6 +289,75 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
     const artistHeader = document.createElement('td');
     const albumHeader = document.createElement('td');
     const trackListing = document.createElement('tbody');
+    const actionHandlers = [
+        [
+            'play',
+            () => {
+                /* ... */
+            },
+        ],
+        [
+            'pause',
+            () => {
+                /* ... */
+            },
+        ],
+        [
+            'previoustrack',
+            () => {
+                /* ... */
+            },
+        ],
+        [
+            'nexttrack',
+            () => {
+                /* ... */
+            },
+        ],
+        [
+            'stop',
+            () => {
+                /* ... */
+            },
+        ],
+        [
+            'seekbackward',
+            (details) => {
+                /* ... */
+            },
+        ],
+        [
+            'seekforward',
+            (details) => {
+                /* ... */
+            },
+        ],
+        [
+            'seekto',
+            (details) => {
+                /* ... */
+            },
+        ],
+        /* Video conferencing actions */
+        [
+            'togglemicrophone',
+            () => {
+                /* ... */
+            },
+        ],
+        [
+            'togglecamera',
+            () => {
+                /* ... */
+            },
+        ],
+        [
+            'hangup',
+            () => {
+                /* ... */
+            },
+        ],
+    ];
 
     this.tracks = [];
     this.nextTrack = function (mode) {
@@ -297,6 +367,8 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
         } else {
             self.trackNumber++;
         }
+
+        self.pause();
 
         // Change the audio element source
         self.play(self.tracks[self.trackNumber]);
@@ -331,7 +403,6 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
                         // title.innerHTML = tag.tags.title;
                         // artist.innerHTML = tag.tags.artist;
                         // album.innerHTML = tag.tags.album;
-
                         if ('mediaSession' in navigator) {
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: tag.tags.title,
@@ -369,58 +440,6 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
                                 //         type: 'image/png',
                                 //     },
                                 // ],
-                            });
-                            navigator.mediaSession.setActionHandler('play', () => {
-                                if (playState === 'play') {
-                                    audioController.play();
-                                    // playAnimation.playSegments([14, 27], true);
-                                    // requestAnimationFrame(whilePlaying);
-                                    playState = 'pause';
-                                } else {
-                                    audioController.pause();
-                                    // playAnimation.playSegments([0, 14], true);
-                                    // cancelAnimationFrame(raf);
-                                    playState = 'play';
-                                }
-                            });
-                            navigator.mediaSession.setActionHandler('pause', () => {
-                                if (playState === 'play') {
-                                    audioController.play();
-                                    // playAnimation.playSegments([14, 27], true);
-                                    // requestAnimationFrame(whilePlaying);
-                                    playState = 'pause';
-                                } else {
-                                    audioController.pause();
-                                    // playAnimation.playSegments([0, 14], true);
-                                    // cancelAnimationFrame(raf);
-                                    playState = 'play';
-                                }
-                            });
-                            navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-                                audioController.currentTime =
-                                    audioController.currentTime - (details.seekOffset || 10);
-                            });
-                            navigator.mediaSession.setActionHandler('seekforward', (details) => {
-                                audioController.currentTime =
-                                    audioController.currentTime + (details.seekOffset || 10);
-                            });
-                            navigator.mediaSession.setActionHandler('seekto', (details) => {
-                                if (details.fastSeek && 'fastSeek' in audioController) {
-                                    audioController.fastSeek(details.seekTime);
-                                    return;
-                                }
-                                audioController.currentTime = details.seekTime;
-                            });
-                            navigator.mediaSession.setActionHandler('stop', () => {
-                                audioController.currentTime = 0;
-                                // seekSlider.value = 0;
-                                // audioPlayerContainer.style.setProperty('--seek-before-width', '0%');
-                                // currentTimeContainer.textContent = '0:00';
-                                if (playState === 'pause') {
-                                    // playAnimation.playSegments([0, 14], true);
-                                    // cancelAnimationFrame(raf);
-                                    playState = 'play';
-                                }
                             });
                         }
                     },
@@ -461,6 +480,14 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
         }
     };
     this.addTracks = function (artist, album, tracks, clearPlaylist = true) {
+        for (const [action, handler] of actionHandlers) {
+            try {
+                navigator.mediaSession.setActionHandler(action, handler);
+            } catch (error) {
+                console.log(`The media session action "${action}" is not supported yet.`);
+            }
+        }
+
         if (clearPlaylist) {
             self.clearPlaylist();
             tracks.forEach((track, index) => {
@@ -480,6 +507,19 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
         self.trackNumber = 0;
         self.tracks = [];
 
+        for (const [action, handler] of actionHandlers) {
+            try {
+                try {
+                    // Unset the "nexttrack" action handler at the end of a playlist.
+                    navigator.mediaSession.setActionHandler('nexttrack', null);
+                } catch (error) {
+                    console.log(`The media session action "nexttrack" is not supported yet.`);
+                }
+            } catch (error) {
+                console.log(`The media session action "${action}" is not supported yet.`);
+            }
+        }
+
         while (trackListing.firstChild) {
             trackListing.removeChild(trackListing.firstChild);
         }
@@ -496,7 +536,6 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
 
     nextButton.classList = 'control';
     nextButton.addEventListener('click', (event) => {
-        self.pause();
         self.nextTrack();
     });
     nextButtonText.innerHTML = 'NEXT!';

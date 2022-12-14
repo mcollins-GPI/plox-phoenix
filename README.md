@@ -2,7 +2,10 @@
 
 ## things to work on
 
+https://web.dev/media-session/
+
 -   artist section
+    -   clear tracklist section when new artist is selected
 -   album section
     -   play and add icons
     -   sort albums by year (where possible)
