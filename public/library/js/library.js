@@ -68,7 +68,8 @@ function ArtistListControl(attachPoint) {
         artistsSorted.forEach((artist) => {
             const artistRow = document.createElement('tr');
             const artistItem = document.createElement('td');
-            const artistFirstLetter = artist.name.slice(0, 1).toUpperCase();
+            // trim leading "the" to make shortcut grouping work correctly for sorted values
+            const artistFirstLetter = artist.name.toUpperCase().replace(/^THE /g, '').slice(0, 1);
 
             if (!letterShortcuts.includes(artistFirstLetter)) {
                 if (!alphaShortcuts.includes(artistFirstLetter)) {
