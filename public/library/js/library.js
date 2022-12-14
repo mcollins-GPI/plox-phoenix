@@ -12,6 +12,9 @@ const artistListControl = new ArtistListControl(artistList);
 const albumListControl = new AlbumListControl(albumList);
 const trackListControl = new TrackListControl(trackList);
 const playlistControl = new PlaylistControl(playList, playlistControls);
+const nonMusicFileTypes = ['v1', 'txt', 'rar', 'm3u'];
+const imageFileTypes = ['jpg', 'jpeg', 'png'];
+const fileTypesToExclude = [...nonMusicFileTypes, ...imageFileTypes];
 
 function ArtistListControl(attachPoint) {
     const self = this;
@@ -22,6 +25,7 @@ function ArtistListControl(attachPoint) {
                 return artist['.tag'] === 'folder';
             })
             .sort((a, b) => {
+                // trim leading "the" for comparison purposes
                 let nameA = a.name.toUpperCase().replace(/^THE /g, ''); // ignore upper and lowercase
                 let nameB = b.name.toUpperCase().replace(/^THE /g, ''); // ignore upper and lowercase
 
@@ -157,9 +161,13 @@ function AlbumListControl(attachPoint) {
         albums.forEach((album) => {
             const albumRow = document.createElement('tr');
             const albumItem = document.createElement('td');
+            // omit hidden files and excluded files from album list
+            let fileType = album.name.split('.').pop();
 
             if (album.name[0] === '.') {
                 console.log('hidden file: ' + album.name);
+            } else if (fileTypesToExclude.includes(fileType.toLowerCase())) {
+                console.log('excluded file type: ' + album.name);
             } else {
                 albumRow.className = 'album-row';
                 albumItem.innerHTML = album.name;
@@ -194,9 +202,6 @@ function AlbumListControl(attachPoint) {
 }
 function TrackListControl(attachPoint) {
     const self = this;
-    const nonMusicFileTypes = ['v1', 'txt', 'rar', 'm3u'];
-    const imageFileTypes = ['jpg', 'jpeg', 'png'];
-    const fileTypesToExclude = [...nonMusicFileTypes, ...imageFileTypes];
 
     this.populate = function (artist, album, tracks) {
         const filteredTracks = tracks.filter((track) => {
