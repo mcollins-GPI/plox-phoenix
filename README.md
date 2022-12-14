@@ -5,7 +5,6 @@
 https://web.dev/media-session/
 
 -   artist section
-    -   clear tracklist section when new artist is selected
 -   album section
     -   play and add icons
     -   sort albums by year (where possible)
@@ -14,7 +13,7 @@ https://web.dev/media-session/
 -   media section
     -   now playing information
     -   three way repeat toggle button
-    -   media control interface for player
+    -   media session interface for player
     -   better styled player
     -   remove track
     -   clear playlist

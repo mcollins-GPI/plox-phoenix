@@ -75,6 +75,7 @@ function ArtistListControl(attachPoint) {
                     const shortcutRow = document.createElement('tr');
                     const shortcutItem = document.createElement('td');
                     const letterLink = document.createElement('div');
+
                     letterLink.className = 'letter-link';
                     letterLink.innerHTML = artistFirstLetter;
                     letterLink.href = `#shortcut-${artistFirstLetter}`;
@@ -109,7 +110,10 @@ function ArtistListControl(attachPoint) {
                     },
                 })
                     .then((response) => response.json())
-                    .then((data) => albumListControl.populate(artist, data.album_list));
+                    .then((data) => {
+                        albumListControl.populate(artist, data.album_list);
+                        trackListControl.clear();
+                    });
             });
             artistItem.innerHTML = artist.name;
             artistRow.append(artistItem);
@@ -212,6 +216,8 @@ function TrackListControl(attachPoint) {
         const addHeader = document.createElement('th');
         const trackListing = document.createElement('tbody');
 
+        self.clear();
+
         albumTitle.innerHTML = `${album.name}`;
         albumTitle.className = 'title-text';
         playHeader.innerHTML = 'play';
@@ -260,12 +266,17 @@ function TrackListControl(attachPoint) {
             trackListing.append(listRow);
         });
 
-        self.clear();
-
         trackList.append(newTrackList);
     };
     this.clear = function () {
+        const albumTitle = document.getElementById('album-title');
+        const albumPlay = document.getElementById('album-play');
+        const albumAdd = document.getElementById('album-add');
         const trackList = document.getElementById('track-list');
+
+        albumTitle.innerHTML = '';
+        albumPlay.classList.add('hidden');
+        albumAdd.classList.add('hidden');
 
         while (trackList.firstChild) {
             trackList.removeChild(trackList.firstChild);
