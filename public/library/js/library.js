@@ -310,74 +310,55 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
         [
             'play',
             () => {
-                /* ... */
+                audioController.play();
             },
         ],
         [
             'pause',
             () => {
-                /* ... */
+                audioController.pause();
             },
         ],
         [
             'previoustrack',
             () => {
-                /* ... */
+                self.previousTrack();
             },
         ],
         [
             'nexttrack',
             () => {
-                /* ... */
+                self.nextTrack();
             },
         ],
-        [
-            'stop',
-            () => {
-                /* ... */
-            },
-        ],
-        [
-            'seekbackward',
-            (details) => {
-                /* ... */
-            },
-        ],
-        [
-            'seekforward',
-            (details) => {
-                /* ... */
-            },
-        ],
-        [
-            'seekto',
-            (details) => {
-                /* ... */
-            },
-        ],
-        /* Video conferencing actions */
-        [
-            'togglemicrophone',
-            () => {
-                /* ... */
-            },
-        ],
-        [
-            'togglecamera',
-            () => {
-                /* ... */
-            },
-        ],
-        [
-            'hangup',
-            () => {
-                /* ... */
-            },
-        ],
+        // [
+        //     'stop',
+        //     () => {
+        //         audioController.stop()
+        //     },
+        // ],
+        // [
+        //     'seekbackward',
+        //     (details) => {
+        //         /* ... */
+        //     },
+        // ],
+        // [
+        //     'seekforward',
+        //     (details) => {
+        //         /* ... */
+        //     },
+        // ],
+        // [
+        //     'seekto',
+        //     (details) => {
+        //         /* ... */
+        //     },
+        // ],
     ];
 
     this.tracks = [];
-    this.nextTrack = function (mode) {
+    this.nextTrack = function () {
         // Check for last audio file in the playlist
         if (self.trackNumber === self.tracks.length - 1) {
             self.trackNumber = 0;
@@ -417,9 +398,6 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
                 jsmediatags.read(myBlob, {
                     onSuccess: function (tag) {
                         console.log(tag);
-                        // title.innerHTML = tag.tags.title;
-                        // artist.innerHTML = tag.tags.artist;
-                        // album.innerHTML = tag.tags.album;
                         if ('mediaSession' in navigator) {
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: tag.tags.title,
@@ -458,13 +436,17 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
                                 //     },
                                 // ],
                             });
+                            for (const [action, handler] of actionHandlers) {
+                                try {
+                                    navigator.mediaSession.setActionHandler(action, handler);
+                                } catch (error) {
+                                    console.log(`The media session action "${action}" is not supported yet.`);
+                                }
+                            }
                         }
                     },
                     onError: function (error) {
                         console.log(error);
-                        // title.innerHTML = 'no title info';
-                        // artist.innerHTML = 'no artist info';
-                        // album.innerHTML = 'no album info';
                     },
                 });
             });
@@ -497,14 +479,6 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
         }
     };
     this.addTracks = function (artist, album, tracks, clearPlaylist = true) {
-        for (const [action, handler] of actionHandlers) {
-            try {
-                navigator.mediaSession.setActionHandler(action, handler);
-            } catch (error) {
-                console.log(`The media session action "${action}" is not supported yet.`);
-            }
-        }
-
         if (clearPlaylist) {
             self.clearPlaylist();
             tracks.forEach((track, index) => {
