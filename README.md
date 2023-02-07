@@ -24,6 +24,7 @@ https://web.dev/media-session/
     -   La Troba Kung-Fú doesn't list albums
     -   Minnesota Orchestra; Osmo VaÌˆnskaÌˆ, conductor doesn't list albums
     -   better styling for buttons
+    -   security
 
 ## resources
 
