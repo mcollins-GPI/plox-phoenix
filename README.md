@@ -10,6 +10,7 @@ https://web.dev/media-session/
     -   sort albums by year (where possible)
 -   tracklist section
     -   play and add icons
+    - songs are not sorted correctly by track 1, 10, 11, 12, etc.
 -   media section
     -   now playing information
     -   three way repeat toggle button
@@ -18,6 +19,7 @@ https://web.dev/media-session/
     -   remove track
     -   clear playlist
     -   [drag and drop reorder](https://codepen.io/chingy/pen/Exxvpjo)
+    - songs are not sorted correctly by track 1, 10, 11, 12, etc.
 -   general
     -   La Troba Kung-Fú doesn't list albums
     -   Minnesota Orchestra; Osmo VaÌˆnskaÌˆ, conductor doesn't list albums
