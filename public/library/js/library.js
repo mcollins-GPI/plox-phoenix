@@ -172,7 +172,7 @@ function AlbumListControl(attachPoint) {
                 albumRow.className = 'album-row';
                 albumItem.innerHTML = album.name;
                 albumRow.addEventListener('click', (event) => {
-                    fetch(baseURL + '/tracks', {
+                    fetch(baseURL + '/tracklist', {
                         method: 'GET',
                         headers: {
                             'Content-Type': 'text/plain;charset=UTF-8',
@@ -181,7 +181,7 @@ function AlbumListControl(attachPoint) {
                         },
                     })
                         .then((response) => response.json())
-                        .then((data) => trackListControl.populate(artist, album, data.track_list));
+                        .then((data) => trackListControl.populate(artist, album, data.tracklist));
                 });
 
                 albumRow.append(albumItem);
@@ -294,6 +294,9 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
     const controls = document.createElement('div');
     const nextButton = document.createElement('div');
     const nextButtonText = document.createElement('span');
+    const repeatButton = document.createElement('div');
+    const repeatButtonText = document.createElement('span');
+    let repeat = false;
 
     const testButton = document.createElement('div');
     const testButtonText = document.createElement('span');
@@ -360,7 +363,7 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
     this.tracks = [];
     this.nextTrack = function () {
         // Check for last audio file in the playlist
-        if (self.trackNumber === self.tracks.length - 1) {
+        if (self.trackNumber === self.tracks.length - 1 && repeat) {
             self.trackNumber = 0;
         } else {
             self.trackNumber++;
@@ -532,6 +535,13 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
     nextButtonText.innerHTML = 'NEXT!';
     nextButton.append(nextButtonText);
 
+    repeatButton.classList = 'control';
+    repeatButton.addEventListener('click', (event) => {
+        repeat = !repeat;
+    });
+    repeatButtonText.innerHTML = 'REPEAT!';
+    repeatButton.append(repeatButtonText);
+
     testButton.classList = 'control';
     testButton.addEventListener('click', (event) => {
         //     var xhr = new XMLHttpRequest();
@@ -578,8 +588,7 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
         //     xhr.send();
 
         var headers = {
-            authorization:
-                'Bearer sl.BUlDhZkOPzqLQsOLrkoMgMiOcgqUUFMyJim1IRHAOk3zAeiUXQU4H2PsA_33_LMMk6LKl9tptZtDFa2rg5ndjBW3MPUIW2FvwoQWR9A627-wsg2uOkQ8nHo6ciuy_YXitSf_KFSI',
+            authorization: 'Bearer sl.BUlDhZkOPzqLQsOLrkoMgMiOcgqUUFMyJim1IRHAOk3zAeiUXQU4H2PsA_33_LMMk6LKl9tptZtDFa2rg5ndjBW3MPUIW2FvwoQWR9A627-wsg2uOkQ8nHo6ciuy_YXitSf_KFSI',
             arg: '{"path":"/music/2 Chainz/Based On A T.R.U. Story (Deluxe) [2012]/02 Crack.mp3"}',
             range: 'bytes=0-1023',
         };
@@ -640,7 +649,7 @@ function PlaylistControl(playlistAttachPoint, controlsAttachPoint) {
     testButton.append(testButtonText);
 
     playlist.append(trackHeader, trackListing);
-    controls.append(nextButton);
+    controls.append(nextButton, repeatButton);
     // controls.append(testButton);
 
     playlistAttachPoint.append(playlist);

@@ -19,6 +19,7 @@ https://web.dev/media-session/
     -   clear playlist
     -   [drag and drop reorder](https://codepen.io/chingy/pen/Exxvpjo)
 -   general
+    -   site is totally useless on a mobile device
     -   La Troba Kung-Fú doesn't list albums
     -   Minnesota Orchestra; Osmo VaÌˆnskaÌˆ, conductor doesn't list albums
     -   better styling for buttons
