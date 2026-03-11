@@ -11,6 +11,7 @@ const TOKEN_TTL = '12h';
 const isProduction = process.env.NODE_ENV === 'production';
 const envAuthSecret = process.env.AUTH_JWT_SECRET || process.env.JWT_SECRET;
 const clientApiBasePath = normalizeBasePath(process.env.CLIENT_API_BASE_PATH || '/dropsonic/data');
+const fallbackDataBasePath = '/data';
 
 if (!envAuthSecret && isProduction) {
     throw new Error('AUTH_JWT_SECRET (or JWT_SECRET) must be set in production to ensure stable JWT tokens.');
@@ -79,26 +80,41 @@ function prefixedUrl(url) {
     return `${clientApiBasePath}${url}`.replace(/\/+/gu, '/');
 }
 
+function buildRouteAliases(url) {
+    const aliases = new Set([url]);
+
+    if (clientApiBasePath !== '/') {
+        aliases.add(prefixedUrl(url));
+    }
+
+    if (fallbackDataBasePath !== '/' && fallbackDataBasePath !== clientApiBasePath) {
+        aliases.add(`${fallbackDataBasePath}${url}`.replace(/\/+/gu, '/'));
+    }
+
+    return Array.from(aliases);
+}
+
 function registerAliasedRoute(method, url, optionsOrHandler, maybeHandler) {
     const hasOptions = typeof optionsOrHandler !== 'function';
     const options = hasOptions ? { ...optionsOrHandler } : {};
     const handler = hasOptions ? maybeHandler : optionsOrHandler;
 
-    fastify.route({
-        method,
-        url,
-        ...options,
-        handler,
-    });
-
-    if (clientApiBasePath !== '/') {
+    buildRouteAliases(url).forEach((routeUrl) => {
         fastify.route({
             method,
-            url: prefixedUrl(url),
+            url: routeUrl,
             ...options,
             handler,
         });
-    }
+    });
+}
+
+function sendRuntimeConfig(reply) {
+    const payload = `window.DropsonicRuntime = Object.assign({}, window.DropsonicRuntime, { apiBasePath: ${JSON.stringify(clientApiBasePath)} });`;
+    reply
+        .type('application/javascript; charset=utf-8')
+        .header('Cache-Control', 'no-store')
+        .send(payload);
 }
 
 function validatePassword(password) {
@@ -449,11 +465,11 @@ fastify.get('/account', async (request, reply) => {
 });
 
 registerAliasedRoute('GET', '/runtime-config.js', async (request, reply) => {
-    const payload = `window.DropsonicRuntime = Object.assign({}, window.DropsonicRuntime, { apiBasePath: ${JSON.stringify(clientApiBasePath)} });`;
-    reply
-        .type('application/javascript; charset=utf-8')
-        .header('Cache-Control', 'no-store')
-        .send(payload);
+    sendRuntimeConfig(reply);
+});
+
+fastify.get('/data/runtime-config.is', async (request, reply) => {
+    sendRuntimeConfig(reply);
 });
 
 registerAliasedRoute('GET', '/api/auth/status', async () => {
