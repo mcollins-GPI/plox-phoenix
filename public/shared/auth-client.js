@@ -49,11 +49,11 @@ const DropsonicAuth = (() => {
     }
 
     async function getStatus() {
-        return api('/api/auth/status');
+        return api('../api/auth/status');
     }
 
     async function getCurrentUser() {
-        const data = await api('/api/auth/me');
+        const data = await api('../api/auth/me');
         return data.user;
     }
 
