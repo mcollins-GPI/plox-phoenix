@@ -10,55 +10,22 @@
             integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65"
             crossorigin="anonymous"
         />
-        <style>
-            body {
-                background: linear-gradient(135deg, #0d1b2a 0%, #1b263b 100%);
-                min-height: 100vh;
-            }
-
-            .shell {
-                max-width: 1100px;
-            }
-
-            .card {
-                border: 0;
-                box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.16);
-            }
-
-            .app-title {
-                color: #fff;
-            }
-
-            .muted-invert {
-                color: rgba(255, 255, 255, 0.75);
-            }
-
-            .hidden {
-                display: none !important;
-            }
-        </style>
+        <link rel="stylesheet" href="/shared/theme.css" />
     </head>
-    <body>
-        <div class="container py-5 shell">
-            <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
-                <div>
-                    <h1 class="app-title mb-1">Dropsonic</h1>
-                    <p class="muted-invert mb-0">Sign in to access your library.</p>
-                </div>
-                <div class="d-flex gap-2">
+    <body class="auth-page login-page">
+        <div class="container auth-shell">
+            <div class="auth-nav login-nav">
                     <a id="account-link" class="btn btn-outline-light hidden" href="/account/">Account</a>
                     <a id="admin-link" class="btn btn-outline-light hidden" href="/admin/">Admin panel</a>
                     <a id="library-link" class="btn btn-outline-light hidden" href="/library/">Open library</a>
                     <button id="logout-button" class="btn btn-outline-warning hidden" type="button">Logout</button>
-                </div>
             </div>
 
-            <div id="alert-box" class="alert hidden" role="alert"></div>
+            <div id="alert-box" class="alert app-alert login-alert hidden" role="alert"></div>
 
-            <div class="row g-4">
-                <div class="col-lg-5">
-                    <div id="bootstrap-card" class="card hidden">
-                        <div class="card-body p-4">
+            <div class="login-content d-grid gap-4">
+                    <div id="bootstrap-card" class="card glass-card hidden">
+                        <div class="card-body p-4 surface-form">
                             <h2 class="h4 mb-3">Initialize admin account</h2>
                             <p class="text-muted">Create the first administrator account for this instance.</p>
                             <form id="bootstrap-form" class="d-grid gap-3">
@@ -75,25 +42,23 @@
                         </div>
                     </div>
 
-                    <div id="login-card" class="card hidden">
-                        <div class="card-body p-4">
-                            <h2 class="h4 mb-3">Sign in</h2>
+                    <div id="login-card" class="card glass-card hidden">
+                        <div class="card-body p-4 surface-form">
+                            <h1 class="auth-title mb-2">Dropsonic</h1>
+                            <div class="auth-kicker">Music archive · private access</div>
                             <form id="login-form" class="d-grid gap-3">
-                                <div>
-                                    <label class="form-label" for="login-user">Username</label>
-                                    <input id="login-user" class="form-control" autocomplete="username" required />
+                                <div class="split-field">
+                                    <label class="split-label" for="login-user">Username</label>
+                                    <input id="login-user" class="form-control split-input" autocomplete="username" required />
                                 </div>
-                                <div>
-                                    <label class="form-label" for="login-password">Password</label>
-                                    <input id="login-password" class="form-control" type="password" autocomplete="current-password" required />
+                                <div class="split-field">
+                                    <label class="split-label" for="login-password">Password</label>
+                                    <input id="login-password" class="form-control split-input" type="password" autocomplete="current-password" required />
                                 </div>
                                 <button class="btn btn-dark" type="submit">Login</button>
                             </form>
                         </div>
                     </div>
-                </div>
-
-                <div class="col-lg-7 d-grid gap-4"></div>
             </div>
         </div>
 

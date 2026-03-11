@@ -14,8 +14,35 @@ body {
     margin: 0;
     font-family: 'Karla', sans-serif;
     overflow: hidden;
-    background: #f4f6f9;
+    background: radial-gradient(circle at top left, rgba(177, 29, 48, 0.08), transparent 25%), linear-gradient(180deg, #f8fafc 0%, #eef2f8 100%);
     color: #0f172a;
+}
+
+#library-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    border-bottom: 1px solid var(--border);
+    background: rgba(248, 250, 252, 0.84);
+    backdrop-filter: blur(18px);
+}
+
+.library-kicker {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-soft);
+    margin-bottom: 0.15rem;
+}
+
+.library-title {
+    font-size: 1.2rem;
+    letter-spacing: -0.02em;
+}
+
+.library-topbar-actions .btn {
+    border-radius: 999px;
+    padding-inline: 0.9rem;
 }
 
 .hidden {
@@ -33,6 +60,7 @@ body {
 
 .section-panel {
     background: var(--panel);
+    box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
 }
 
 #artist-section {
@@ -101,6 +129,11 @@ body {
     cursor: pointer;
     transition: 180ms ease;
 }
+
+#artist-list .table > :not(caption) > * > * {
+    padding: 0.72rem 0.9rem;
+}
+
 #artist-list .artist-row:hover {
     background-color: var(--accent-soft);
 }
@@ -130,6 +163,11 @@ body {
 #album-list .album-row {
     transition: 180ms ease;
 }
+
+#album-list .table > :not(caption) > * > * {
+    padding: 0.78rem 0.9rem;
+}
+
 #album-list .album-row:hover {
     background-color: var(--accent-soft);
 }
@@ -204,6 +242,11 @@ body {
 #track-section .track-row {
     transition: 180ms ease;
 }
+
+#track-list .table > :not(caption) > * > * {
+    padding: 0.78rem 0.9rem;
+}
+
 #track-section .track-row:hover {
     background-color: var(--accent-soft);
 }
@@ -287,6 +330,10 @@ body {
     background-color: var(--accent-soft);
 }
 
+#playlist .table > :not(caption) > * > * {
+    padding: 0.78rem 0.9rem;
+}
+
 .playing {
     transform: scale(1);
     animation: pulse 3.2s ease-in-out infinite;
@@ -342,6 +389,14 @@ body {
 
 .table > :not(caption) > * > * {
     vertical-align: middle;
+}
+
+thead th {
+    color: rgba(15, 23, 42, 0.68);
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
 }
 
 .mini-button {
@@ -429,6 +484,10 @@ body {
         min-height: 34vh;
     }
 
+    .section-panel {
+        box-shadow: none;
+    }
+
     #control-container {
         align-items: stretch;
     }
@@ -441,6 +500,11 @@ body {
 }
 
 @media (max-width: 640px) {
+    #library-topbar {
+        padding-top: 0.9rem !important;
+        padding-bottom: 0.9rem !important;
+    }
+
     #collection-summary,
     #artist-summary,
     #track-section .title-container {

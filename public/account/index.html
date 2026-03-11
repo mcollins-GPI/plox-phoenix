@@ -10,72 +10,79 @@
             integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65"
             crossorigin="anonymous"
         />
-        <style>
-            body {
-                background: linear-gradient(135deg, #0d1b2a 0%, #1b263b 100%);
-                min-height: 100vh;
-            }
-
-            .shell {
-                max-width: 960px;
-            }
-
-            .card {
-                border: 0;
-                box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.16);
-            }
-
-            .app-title {
-                color: #fff;
-            }
-
-            .muted-invert {
-                color: rgba(255, 255, 255, 0.75);
-            }
-
-            .hidden {
-                display: none !important;
-            }
-        </style>
+        <link rel="stylesheet" href="/shared/theme.css" />
     </head>
-    <body>
-        <div class="container py-5 shell">
-            <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
-                <div>
-                    <h1 class="app-title mb-1">Dropsonic Account</h1>
-                    <p class="muted-invert mb-0">Review your account and update your password.</p>
+    <body class="auth-page">
+        <div class="container py-5 auth-shell">
+            <div class="auth-header">
+                <div class="auth-header-copy">
+                    <div class="auth-kicker">Account settings</div>
+                    <h1 class="auth-title mb-2">Dropsonic Account</h1>
+                    <p class="auth-subtitle mb-0">Review your account status, keep credentials current, and move back into the library when you are done.</p>
                 </div>
-                <div class="d-flex gap-2">
+                <div class="auth-nav">
                     <a id="admin-link" class="btn btn-outline-light hidden" href="/admin/">Admin panel</a>
                     <a class="btn btn-outline-light" href="/library/">Open library</a>
                     <button id="logout-button" class="btn btn-outline-warning" type="button">Logout</button>
                 </div>
             </div>
 
-            <div id="alert-box" class="alert hidden" role="alert"></div>
+            <div id="alert-box" class="alert app-alert hidden" role="alert"></div>
 
-            <div class="card">
-                <div class="card-body p-4">
-                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-                        <div>
-                            <h2 class="h4 mb-1">Account</h2>
-                            <div id="account-summary" class="text-muted"></div>
+            <div class="row g-4 align-items-stretch">
+                <div class="col-lg-7">
+                    <div class="card glass-card h-100">
+                        <div class="card-body p-4 surface-form account-stack">
+                            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                                <div>
+                                    <h2 class="h4 mb-2">Account</h2>
+                                    <div id="account-summary" class="text-muted"></div>
+                                </div>
+                                <span id="account-badge" class="badge bg-secondary"></span>
+                            </div>
+                            <form id="password-form" class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label" for="current-password">Current password</label>
+                                    <input id="current-password" class="form-control" type="password" autocomplete="current-password" required />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label" for="new-password">New password</label>
+                                    <input id="new-password" class="form-control" type="password" autocomplete="new-password" required />
+                                </div>
+                                <div class="col-12">
+                                    <button class="btn btn-outline-primary" type="submit">Change password</button>
+                                </div>
+                            </form>
                         </div>
-                        <span id="account-badge" class="badge bg-secondary"></span>
                     </div>
-                    <form id="password-form" class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label" for="current-password">Current password</label>
-                            <input id="current-password" class="form-control" type="password" autocomplete="current-password" required />
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label" for="new-password">New password</label>
-                            <input id="new-password" class="form-control" type="password" autocomplete="new-password" required />
-                        </div>
-                        <div class="col-12">
-                            <button class="btn btn-outline-primary" type="submit">Change password</button>
-                        </div>
-                    </form>
+                </div>
+                <div class="col-lg-5">
+                    <div class="info-panel hero h-100">
+                        <h2 class="h4 mb-3">Good account hygiene</h2>
+                        <ul class="feature-list mt-0">
+                            <li>
+                                <span class="feature-icon">🔒</span>
+                                <div>
+                                    <strong>Separate account flow</strong>
+                                    <div>Password management stays distinct from the listening interface.</div>
+                                </div>
+                            </li>
+                            <li>
+                                <span class="feature-icon">⚡</span>
+                                <div>
+                                    <strong>Quick return</strong>
+                                    <div>Move straight back to the library after making changes.</div>
+                                </div>
+                            </li>
+                            <li>
+                                <span class="feature-icon">🛡</span>
+                                <div>
+                                    <strong>Admin aware</strong>
+                                    <div>Privileged users keep a direct path to management tools.</div>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
