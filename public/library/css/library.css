@@ -85,35 +85,92 @@ body {
     font-size: 0.5em;
     display: flex;
     flex-direction: row;
-    align-content: space-between;
-    justify-content: space-between;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+}
+
+.artist-search-wrap {
+    position: relative;
+    line-height: 0;
+}
+
+#artist-search {
+    display: block;
+    width: 100%;
+    height: 38px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.96);
+    color: #0f172a;
+    font-size: 0.38em;
+    padding: 0 38px 0 12px;
+    outline: 0;
+}
+
+#artist-search:focus {
+    border-color: rgba(177, 29, 48, 0.35);
+    box-shadow: 0 0 0 0.2rem rgba(177, 29, 48, 0.12);
+}
+
+#artist-search-clear {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border-radius: 50%;
+    border: 0;
+    appearance: none;
+    background: rgba(15, 23, 42, 0.12);
+    color: #0f172a;
+    font-size: 0;
+    line-height: 0;
+    display: block;
+}
+
+#artist-search-clear::before {
+    content: '×';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+#artist-search-clear:hover {
+    background: var(--accent-soft-strong);
 }
 
 .artist-navigation .letter-link {
     cursor: pointer;
-    flex: 1;
-    text-align: center;
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background-color: rgba(15, 23, 42, 0.08);
-    border-right: 1px solid var(--border);
     transition: 180ms ease;
-    border-radius: 8px;
-    margin-right: 4px;
-    padding: 0.1rem 0;
+    border-radius: 999px;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    line-height: 1.1;
 }
 
 .artist-navigation .letter-link:hover {
     background-color: var(--accent-soft-strong);
 }
 
-.artist-navigation .letter-link:first-of-type {
-    border-top-left-radius: 5px;
-    border-bottom-left-radius: 5px;
-}
-
-.artist-navigation .letter-link:last-of-type {
-    border-top-right-radius: 5px;
-    border-bottom-right-radius: 5px;
-    border-right: none;
+.artist-navigation .letter-link.active {
+    background-color: rgba(177, 29, 48, 0.24);
+    color: #5f1220;
+    font-weight: 700;
 }
 
 #artist-list {

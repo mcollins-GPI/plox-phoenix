@@ -10,6 +10,8 @@ const elements = {
     artistList: document.getElementById('artist-list'),
     artistNavigation: document.querySelectorAll('.artist-navigation'),
     artistSummary: document.getElementById('artist-summary'),
+    artistSearch: document.getElementById('artist-search'),
+    artistSearchClear: document.getElementById('artist-search-clear'),
     albumList: document.getElementById('album-list'),
     albumTitle: document.getElementById('album-title'),
     albumPlay: document.getElementById('album-play'),
@@ -28,6 +30,7 @@ const state = {
     artists: [],
     albums: [],
     tracks: [],
+    artistSearchQuery: '',
     selectedArtist: null,
     selectedAlbum: null,
     playlist: [],
@@ -162,9 +165,7 @@ function getTrackAlbum(track, fallbackAlbum = '') {
 }
 
 function sortArtists(artists) {
-    return [...artists]
-        .filter((artist) => artist['.tag'] === 'folder')
-        .sort((left, right) => naturalCompare(normalizeArtistName(left.name), normalizeArtistName(right.name)));
+    return [...artists].filter((artist) => artist['.tag'] === 'folder').sort((left, right) => naturalCompare(normalizeArtistName(left.name), normalizeArtistName(right.name)));
 }
 
 function sortAlbums(albums) {
@@ -252,7 +253,7 @@ function updateNowPlaying(item = null) {
     const album = getTrackAlbum(item.track, item.album.name);
 
     elements.nowPlayingTitle.textContent = title;
-    elements.nowPlayingSub.textContent = [artist, album].filter(Boolean).join(' — ') || ' '; 
+    elements.nowPlayingSub.textContent = [artist, album].filter(Boolean).join(' — ') || ' ';
     elements.audioController.title = `Now playing: ${title}`;
     elements.audioController.setAttribute('aria-label', `Now playing: ${title}`);
 }
@@ -363,28 +364,85 @@ function renderArtists() {
     elements.artistNavigation.forEach((node) => clearElement(node));
 
     const artists = sortArtists(state.artists);
+    const searchQuery = String(state.artistSearchQuery || '')
+        .trim()
+        .toLowerCase();
+    const filteredArtists = artists.filter((artist) => {
+        const artistName = String(artist?.name || '');
+        const searchMatches = !searchQuery || artistName.toLowerCase().includes(searchQuery);
+        return searchMatches;
+    });
+
     const table = document.createElement('table');
     const body = document.createElement('tbody');
     const letterTargets = new Map();
     const assortedRows = [];
+    const hasAssortedMatches = filteredArtists.some((artist) => {
+        const firstChar = normalizeArtistName(artist.name).slice(0, 1) || '@';
+        return !/^[A-Z]$/u.test(firstChar);
+    });
+    const availableShortcuts = new Set();
 
-    elements.artistCount.textContent = `Artists (${artists.length})`;
+    if (hasAssortedMatches) {
+        availableShortcuts.add('@');
+    }
+
+    const countText = filteredArtists.length === artists.length ? `Artists (${artists.length})` : `Artists (${filteredArtists.length}/${artists.length})`;
+    elements.artistCount.textContent = countText;
+    if (elements.artistSearchClear) {
+        elements.artistSearchClear.classList.toggle('hidden', searchQuery.length === 0);
+    }
     table.className = 'table table-hover';
 
-    const assortedShortcutRow = document.createElement('tr');
-    assortedShortcutRow.className = 'artist-list-shortcut';
-    assortedShortcutRow.id = 'shortcut-assorted';
-    const assortedShortcutCell = document.createElement('td');
-    assortedShortcutCell.textContent = 'Assorted';
-    assortedShortcutRow.append(assortedShortcutCell);
+    filteredArtists.forEach((artist) => {
+        const displayLetter = normalizeArtistName(artist.name).slice(0, 1) || '@';
+        if (/^[A-Z]$/u.test(displayLetter)) {
+            availableShortcuts.add(displayLetter);
+        }
+    });
 
-    const assortedLink = document.createElement('div');
-    assortedLink.className = 'letter-link';
-    assortedLink.textContent = '@';
-    assortedLink.addEventListener('click', () => assortedShortcutRow.scrollIntoView({ behavior: 'smooth' }));
-    elements.artistNavigation[0].append(assortedLink);
+    const shortcuts = Array.from(availableShortcuts).sort((left, right) => {
+        if (left === '@') {
+            return -1;
+        }
+        if (right === '@') {
+            return 1;
+        }
+        return naturalCompare(left, right);
+    });
 
-    artists.forEach((artist) => {
+    shortcuts.forEach((shortcut, index) => {
+        const link = document.createElement('div');
+        link.className = 'letter-link';
+        link.textContent = shortcut;
+        link.addEventListener('click', () => {
+            const targetId = shortcut === '@' ? 'shortcut-assorted' : `shortcut-${shortcut}`;
+            const target = document.getElementById(targetId);
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+
+        const targetNav = index >= Math.ceil(shortcuts.length / 2) ? elements.artistNavigation[1] : elements.artistNavigation[0];
+        targetNav.append(link);
+    });
+
+    if (filteredArtists.length === 0) {
+        setEmptyState(elements.artistList, 'No artists match the current filters.');
+        return;
+    }
+
+    let assortedShortcutRow = null;
+    if (hasAssortedMatches) {
+        assortedShortcutRow = document.createElement('tr');
+        assortedShortcutRow.className = 'artist-list-shortcut';
+        assortedShortcutRow.id = 'shortcut-assorted';
+        const assortedShortcutCell = document.createElement('td');
+        assortedShortcutCell.textContent = 'Assorted';
+        assortedShortcutRow.append(assortedShortcutCell);
+    }
+
+    filteredArtists.forEach((artist) => {
         const displayLetter = normalizeArtistName(artist.name).slice(0, 1) || '@';
         const isLetter = /^[A-Z]$/u.test(displayLetter);
 
@@ -397,13 +455,6 @@ function renderArtists() {
             shortcutRow.append(shortcutCell);
             body.append(shortcutRow);
             letterTargets.set(displayLetter, shortcutRow);
-
-            const link = document.createElement('div');
-            link.className = 'letter-link';
-            link.textContent = displayLetter;
-            link.addEventListener('click', () => shortcutRow.scrollIntoView({ behavior: 'smooth' }));
-            const targetNav = letterTargets.size > 13 ? elements.artistNavigation[1] : elements.artistNavigation[0];
-            targetNav.append(link);
         }
 
         const row = document.createElement('tr');
@@ -421,7 +472,9 @@ function renderArtists() {
         }
     });
 
-    body.prepend(assortedShortcutRow, ...assortedRows);
+    if (assortedShortcutRow && assortedRows.length > 0) {
+        body.prepend(assortedShortcutRow, ...assortedRows);
+    }
     table.append(body);
     elements.artistList.append(table);
 }
@@ -931,6 +984,40 @@ async function initializeLibrary() {
         elements.logoutButton.addEventListener('click', () => {
             window.localStorage.removeItem(AUTH_TOKEN_KEY);
             redirectToLogin();
+        });
+    }
+
+    state.artistSearchQuery = '';
+    if (elements.artistSearch) {
+        elements.artistSearch.value = '';
+    }
+    if (elements.artistSearchClear) {
+        elements.artistSearchClear.classList.add('hidden');
+    }
+
+    if (elements.artistSearch) {
+        elements.artistSearch.addEventListener('input', (event) => {
+            state.artistSearchQuery = event.target.value || '';
+            renderArtists();
+        });
+
+        elements.artistSearch.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                state.artistSearchQuery = '';
+                elements.artistSearch.value = '';
+                renderArtists();
+            }
+        });
+    }
+
+    if (elements.artistSearchClear) {
+        elements.artistSearchClear.addEventListener('click', () => {
+            state.artistSearchQuery = '';
+            if (elements.artistSearch) {
+                elements.artistSearch.value = '';
+                elements.artistSearch.focus();
+            }
+            renderArtists();
         });
     }
 
