@@ -68,7 +68,7 @@ elements.bootstrapForm.addEventListener('submit', async (event) => {
     clearAlert();
 
     try {
-        const data = await auth.api('../api/auth/bootstrap', {
+        const data = await auth.api('/api/auth/bootstrap', {
             method: 'POST',
             body: {
                 user: document.getElementById('bootstrap-user').value,
@@ -89,7 +89,7 @@ elements.loginForm.addEventListener('submit', async (event) => {
     clearAlert();
 
     try {
-        const data = await auth.api('../api/auth/login', {
+        const data = await auth.api('/api/auth/login', {
             method: 'POST',
             body: {
                 user: document.getElementById('login-user').value,

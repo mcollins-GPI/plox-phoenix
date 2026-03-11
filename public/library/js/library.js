@@ -1,4 +1,8 @@
-const baseURL = new URL('.', window.location.href).toString();
+const configuredApiBasePath = window.DropsonicRuntime?.apiBasePath;
+const apiBasePath = typeof configuredApiBasePath === 'string' && configuredApiBasePath.trim() !== ''
+    ? configuredApiBasePath
+    : '../data';
+const baseURL = new URL(`${apiBasePath.replace(/\/+$/u, '')}/`, window.location.href).toString();
 const AUTH_TOKEN_KEY = 'dropsonic.authToken';
 const nonMusicFileTypes = ['v1', 'txt', 'rar', 'm3u'];
 const imageFileTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
@@ -275,7 +279,7 @@ async function getTagsFast(track) {
     }
 
     const pending = (async () => {
-        const response = await apiFetch(buildUrl('../track', { path: track.path_lower }), {
+        const response = await apiFetch(buildUrl('track', { path: track.path_lower }), {
             method: 'GET',
             headers: {
                 Range: 'bytes=0-65535',
@@ -830,7 +834,7 @@ async function playIndex(index) {
     updateNowPlaying(item);
 
     try {
-        const response = await apiFetch(buildUrl('../track', { path: item.track.path_lower }), {
+        const response = await apiFetch(buildUrl('track', { path: item.track.path_lower }), {
             method: 'GET',
         });
         const blob = await response.blob();
@@ -942,7 +946,7 @@ function previousTrack() {
 }
 
 async function queueAlbum(artist, album, playNow) {
-    const data = await apiGetJson('../tracks', { artist: artist.name, album: album.name });
+    const data = await apiGetJson('tracks', { artist: artist.name, album: album.name });
     const tracks = sortTracks(data.track_list);
 
     if (playNow) {
@@ -958,7 +962,7 @@ async function loadAlbums(artist) {
     state.tracks = [];
     renderTracks();
 
-    const data = await apiGetJson('../album', { artist: artist.name });
+    const data = await apiGetJson('album', { artist: artist.name });
     state.albums = sortAlbums(data.album_list);
     renderAlbums();
 }
@@ -967,13 +971,13 @@ async function loadTracks(artist, album) {
     state.selectedArtist = artist;
     state.selectedAlbum = album;
 
-    const data = await apiGetJson('../tracks', { artist: artist.name, album: album.name });
+    const data = await apiGetJson('tracks', { artist: artist.name, album: album.name });
     state.tracks = sortTracks(data.track_list);
     renderTracks();
 }
 
 async function hydrateLibraryIdentity() {
-    const data = await apiGetJson('../api/auth/me');
+    const data = await apiGetJson('api/auth/me');
     if (elements.libraryUser) {
         elements.libraryUser.textContent = `Signed in as ${data.user.user}${data.user.isAdmin ? ' (admin)' : ''}`;
     }
@@ -1041,7 +1045,7 @@ async function initializeLibrary() {
     renderPlaylist();
     await hydrateLibraryIdentity();
 
-    const data = await apiGetJson('../artist');
+    const data = await apiGetJson('artist');
     state.artists = data.artist_list;
     renderArtists();
 }

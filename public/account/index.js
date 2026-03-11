@@ -52,7 +52,7 @@ elements.passwordForm.addEventListener('submit', async (event) => {
     clearAlert();
 
     try {
-        await auth.api('../api/auth/password', {
+        await auth.api('/api/auth/password', {
             method: 'POST',
             body: {
                 currentPassword: document.getElementById('current-password').value,

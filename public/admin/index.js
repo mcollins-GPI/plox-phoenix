@@ -66,7 +66,7 @@ function renderUserTable() {
 
         row.querySelector('.save-button').addEventListener('click', async () => {
             try {
-                await auth.api(`../api/admin/users/${encodeURIComponent(user.user)}`, {
+                await auth.api(`/api/admin/users/${encodeURIComponent(user.user)}`, {
                     method: 'PATCH',
                     body: {
                         isAdmin: row.querySelector('.admin-toggle').checked,
@@ -85,7 +85,7 @@ function renderUserTable() {
             const password = row.querySelector('.reset-password').value;
 
             try {
-                await auth.api(`../api/admin/users/${encodeURIComponent(user.user)}/reset`, {
+                await auth.api(`/api/admin/users/${encodeURIComponent(user.user)}/reset`, {
                     method: 'POST',
                     body: { password },
                 });
@@ -103,7 +103,7 @@ function renderUserTable() {
             }
 
             try {
-                await auth.api(`../api/admin/users/${encodeURIComponent(user.user)}`, { method: 'DELETE' });
+                await auth.api(`/api/admin/users/${encodeURIComponent(user.user)}`, { method: 'DELETE' });
                 showAlert(`Deleted ${user.user}.`);
                 await hydrate();
             } catch (error) {
@@ -140,7 +140,7 @@ async function hydrate() {
         return;
     }
 
-    const adminData = await auth.api('../api/admin/users');
+    const adminData = await auth.api('/api/admin/users');
     state.users = adminData.users;
     render();
 }
@@ -150,7 +150,7 @@ elements.createUserForm.addEventListener('submit', async (event) => {
     clearAlert();
 
     try {
-        await auth.api('../api/admin/users', {
+        await auth.api('/api/admin/users', {
             method: 'POST',
             body: {
                 user: document.getElementById('create-user').value,

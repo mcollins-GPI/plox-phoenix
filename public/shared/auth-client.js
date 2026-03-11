@@ -2,6 +2,21 @@ const DropsonicAuth = (() => {
     const TOKEN_KEY = 'dropsonic.authToken';
     let token = window.localStorage.getItem(TOKEN_KEY);
 
+    function getApiBasePath() {
+        const configured = window.DropsonicRuntime?.apiBasePath;
+
+        if (typeof configured !== 'string' || configured.trim() === '') {
+            return '../data';
+        }
+
+        return configured.replace(/\/+$/u, '');
+    }
+
+    function resolveApiPath(path) {
+        const normalizedPath = String(path || '').replace(/^\/+/u, '');
+        return `${getApiBasePath()}/${normalizedPath}`;
+    }
+
     function setToken(nextToken) {
         token = nextToken || null;
 
@@ -27,7 +42,7 @@ const DropsonicAuth = (() => {
 
         requestOptions.headers = headers;
 
-        const response = await fetch(path, requestOptions);
+        const response = await fetch(resolveApiPath(path), requestOptions);
         let data = null;
 
         if (response.status !== 204) {
@@ -49,11 +64,11 @@ const DropsonicAuth = (() => {
     }
 
     async function getStatus() {
-        return api('../api/auth/status');
+        return api('/api/auth/status');
     }
 
     async function getCurrentUser() {
-        const data = await api('../api/auth/me');
+        const data = await api('/api/auth/me');
         return data.user;
     }
 

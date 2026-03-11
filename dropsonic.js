@@ -10,6 +10,7 @@ const PASSWORD_MIN_LENGTH = 8;
 const TOKEN_TTL = '12h';
 const isProduction = process.env.NODE_ENV === 'production';
 const envAuthSecret = process.env.AUTH_JWT_SECRET || process.env.JWT_SECRET;
+const clientApiBasePath = normalizeBasePath(process.env.CLIENT_API_BASE_PATH || '/dropsonic/data');
 
 if (!envAuthSecret && isProduction) {
     throw new Error('AUTH_JWT_SECRET (or JWT_SECRET) must be set in production to ensure stable JWT tokens.');
@@ -57,6 +58,17 @@ function normalizeUsername(value) {
     }
 
     return normalized;
+}
+
+function normalizeBasePath(value) {
+    const raw = String(value || '').trim();
+
+    if (!raw || raw === '/') {
+        return '/';
+    }
+
+    const withLeadingSlash = raw.startsWith('/') ? raw : `/${raw}`;
+    return withLeadingSlash.replace(/\/+$/u, '');
 }
 
 function validatePassword(password) {
@@ -404,6 +416,22 @@ fastify.get('/admin', async (request, reply) => {
 
 fastify.get('/account', async (request, reply) => {
     reply.redirect('/account/');
+});
+
+fastify.get('/runtime-config.js', async (request, reply) => {
+    const payload = `window.DropsonicRuntime = Object.assign({}, window.DropsonicRuntime, { apiBasePath: ${JSON.stringify(clientApiBasePath)} });`;
+    reply
+        .type('application/javascript; charset=utf-8')
+        .header('Cache-Control', 'no-store')
+        .send(payload);
+});
+
+fastify.get('/data/runtime-config.js', async (request, reply) => {
+    const payload = `window.DropsonicRuntime = Object.assign({}, window.DropsonicRuntime, { apiBasePath: ${JSON.stringify(clientApiBasePath)} });`;
+    reply
+        .type('application/javascript; charset=utf-8')
+        .header('Cache-Control', 'no-store')
+        .send(payload);
 });
 
 fastify.get('/api/auth/status', async () => {
