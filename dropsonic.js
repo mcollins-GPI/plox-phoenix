@@ -653,7 +653,7 @@ fastify.get('/refresh-artist', { preHandler: requireAdmin }, async (request, rep
 
 fastify.get('/album', { preHandler: requireAuth }, async (request, reply) => {
     try {
-        const artist = request.headers.artist;
+        const artist = request.query.artist || request.headers.artist;
         const albums = await getFolders(artist);
         reply.send({ album_list: albums });
     } catch (error) {
@@ -663,7 +663,9 @@ fastify.get('/album', { preHandler: requireAuth }, async (request, reply) => {
 
 fastify.get('/tracks', { preHandler: requireAuth }, async (request, reply) => {
     try {
-        const tracks = await getFolders(request.headers.artist, request.headers.album, true);
+        const artist = request.query.artist || request.headers.artist;
+        const album = request.query.album || request.headers.album;
+        const tracks = await getFolders(artist, album, true);
         reply.send({ track_list: tracks });
     } catch (error) {
         reply.code(500).send({ error: 'Unable to load tracks.' });
@@ -671,7 +673,7 @@ fastify.get('/tracks', { preHandler: requireAuth }, async (request, reply) => {
 });
 
 fastify.get('/track', { preHandler: requireAuth }, async (request, reply) => {
-    const trackPath = request.headers.path;
+    const trackPath = request.query.path || request.headers.path;
     const range = request.headers.range;
 
     if (!trackPath) {
@@ -693,13 +695,15 @@ fastify.get('/track', { preHandler: requireAuth }, async (request, reply) => {
 });
 
 fastify.get('/track-info', { preHandler: requireAuth }, async (request, reply) => {
-    if (!request.headers.path) {
+    const trackPath = request.query.path || request.headers.path;
+
+    if (!trackPath) {
         reply.code(400).send({ error: 'Missing path header.' });
         return;
     }
 
     try {
-        const fileInfo = await getFileInfo(request.headers.path);
+        const fileInfo = await getFileInfo(trackPath);
         reply.header('Content-Type', 'application/json; charset=utf-8').send({ file_info: fileInfo });
     } catch (error) {
         reply.code(500).send({ error: 'Unable to load track information.' });
