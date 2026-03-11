@@ -111,10 +111,7 @@ function registerAliasedRoute(method, url, optionsOrHandler, maybeHandler) {
 
 function sendRuntimeConfig(reply) {
     const payload = `window.DropsonicRuntime = Object.assign({}, window.DropsonicRuntime, { apiBasePath: ${JSON.stringify(clientApiBasePath)} });`;
-    reply
-        .type('application/javascript; charset=utf-8')
-        .header('Cache-Control', 'no-store')
-        .send(payload);
+    reply.type('application/javascript; charset=utf-8').header('Cache-Control', 'no-store').send(payload);
 }
 
 function validatePassword(password) {
