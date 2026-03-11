@@ -2,32 +2,21 @@
 
 ## things to work on
 
-### low difficulty (quick wins)
-
-- [x] header section
-    - remove "personal library" text
-- [x] artist section
-    - top of search input getting cut off by header
-    - search and filter controls sticky while browsing artist list
-- [x] album section
+- header section
+    - none
+- artist section
+    - search and filter controls sticky while browsing artist list in mobile environment
+- album section
     - selected artist displayed in section header
-- [x] tracklist section
+- tracklist section
     - selected album displayed in section header
-
-### medium difficulty (next pass)
-
-- [x] media section
-    - refined track information from tracklist flow reflected in media section
-    - media player controls styled to better match the rest of the interface
-- [x] general
-    - improved button styling consistency across views
-    - improved mobile usability and responsive behavior
-
-### high difficulty (backlog)
-
+- media section
+    - none
 - general
+    - improved mobile usability and responsive behavior
     - add google cast support
     - have server request media tags and display them responsively
+    - store parsed media information so that it doesn't have to read tags every time
     - stream music from the server instead of loading full track before playback
 
 ## resources
