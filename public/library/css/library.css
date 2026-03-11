@@ -88,7 +88,6 @@ body {
 
 #album-section {
     width: 25vw;
-
     border-right: 1px solid rgba(0, 0, 0, 0.25);
     overflow: hidden;
     display: flex;
@@ -110,7 +109,7 @@ body {
     transition: 500ms;
 }
 #album-list .album-row:hover {
-    background-color: rgba(255, 0, 0, 0.5);
+    background-color: rgba(255, 0, 0, 0.1);
     transition: 500ms;
 }
 
@@ -145,7 +144,7 @@ body {
     transition: 500ms;
 }
 #track-section .control:hover {
-    background-color: rgba(255, 0, 0, 0.5);
+    background-color: rgba(255, 0, 0, 0.1);
     transition: 500ms;
 }
 
@@ -172,7 +171,7 @@ body {
     transition: 500ms;
 }
 #track-section .track-row:hover {
-    background-color: rgba(255, 0, 0, 0.5);
+    background-color: rgba(255, 0, 0, 0.1);
     transition: 500ms;
 }
 
@@ -189,6 +188,12 @@ body {
     gap: 5px;
     align-items: center;
 }
+#playlist-controls {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    margin: 5px;
+}
 
 #playlist-controls .control {
     cursor: pointer;
@@ -201,7 +206,7 @@ body {
     background-color: rgba(0, 0, 0, 0.05);
 }
 #playlist-controls .control:hover {
-    background-color: rgba(255, 0, 0, 0.5);
+    background-color: rgba(255, 0, 0, 0.1);
 }
 
 #playlist-controls .control span {
@@ -231,25 +236,48 @@ body {
 }
 
 #playlist .track-row:hover {
-    background-color: rgba(255, 0, 0, 0.5);
+    background-color: rgba(255, 0, 0, 0.1);
     transition: 500ms;
 }
 
 .playing {
     transform: scale(1);
-    animation: pulse 2s infinite;
+    animation: pulse 3.2s ease-in-out infinite;
 }
 
 @keyframes pulse {
     0% {
-        background-color: rgba(255, 0, 0, 0);
+        background-color: rgba(255, 0, 0, 0.015);
     }
 
     50% {
-        background-color: rgba(255, 0, 0, 0.5);
+        background-color: rgba(255, 0, 0, 0.05);
     }
 
     100% {
-        background-color: rgba(255, 0, 0, 0);
+        background-color: rgba(255, 0, 0, 0.015);
     }
+}
+
+.now-playing {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-family:
+        system-ui,
+        -apple-system,
+        Segoe UI,
+        Roboto,
+        Arial,
+        sans-serif;
+}
+
+.np-title {
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.np-sub {
+    opacity: 0.8;
+    font-size: 0.9rem;
 }
