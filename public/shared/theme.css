@@ -107,6 +107,21 @@ body.auth-page {
     font-size: 1.02rem;
 }
 
+.auth-page:not(.login-page) .auth-header-copy .auth-kicker {
+    color: rgba(248, 250, 252, 0.86);
+    border-color: rgba(248, 250, 252, 0.26);
+    background: rgba(248, 250, 252, 0.08);
+}
+
+.auth-page:not(.login-page) .auth-header-copy .auth-title {
+    color: #f8fafc;
+    text-shadow: 0 2px 16px rgba(2, 6, 23, 0.45);
+}
+
+.auth-page:not(.login-page) .auth-header-copy .auth-subtitle {
+    color: rgba(248, 250, 252, 0.86);
+}
+
 .auth-nav {
     display: flex;
     flex-wrap: wrap;
@@ -118,6 +133,12 @@ body.auth-page {
     border-radius: 999px;
     padding-inline: 1rem;
     backdrop-filter: blur(18px);
+    font-weight: 600;
+    transition: 180ms ease;
+}
+
+.auth-nav .btn:hover {
+    transform: translateY(-1px);
 }
 
 .glass-card,
@@ -233,6 +254,11 @@ body.auth-page {
     min-height: 48px;
     border-radius: 16px;
     font-weight: 600;
+    transition: 180ms ease;
+}
+
+.surface-form .btn:hover {
+    transform: translateY(-1px);
 }
 
 .app-alert {
@@ -384,6 +410,16 @@ body.auth-page {
 
     .auth-shell {
         padding-inline: 0.45rem;
+    }
+
+    .auth-nav {
+        width: 100%;
+        justify-content: stretch;
+    }
+
+    .auth-nav .btn {
+        flex: 1 1 140px;
+        text-align: center;
     }
 
     .glass-card .card-body,

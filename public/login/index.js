@@ -60,6 +60,11 @@ async function hydrate() {
         }
     }
 
+    if (state.currentUser) {
+        redirectToLibrary();
+        return;
+    }
+
     render();
 }
 

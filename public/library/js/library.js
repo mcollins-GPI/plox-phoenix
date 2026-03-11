@@ -1,7 +1,5 @@
 const configuredApiBasePath = window.DropsonicRuntime?.apiBasePath;
-const apiBasePath = typeof configuredApiBasePath === 'string' && configuredApiBasePath.trim() !== ''
-    ? configuredApiBasePath
-    : '../data';
+const apiBasePath = typeof configuredApiBasePath === 'string' && configuredApiBasePath.trim() !== '' ? configuredApiBasePath : '../data';
 const baseURL = new URL(`${apiBasePath.replace(/\/+$/u, '')}/`, window.location.href).toString();
 const AUTH_TOKEN_KEY = 'dropsonic.authToken';
 const nonMusicFileTypes = ['v1', 'txt', 'rar', 'm3u'];
@@ -24,6 +22,10 @@ const elements = {
     playList: document.getElementById('playlist'),
     playlistControls: document.getElementById('playlist-controls'),
     audioController: document.getElementById('audio-controller'),
+    audioPlayToggle: document.getElementById('audio-play-toggle'),
+    audioSeek: document.getElementById('audio-seek'),
+    audioTime: document.getElementById('audio-time'),
+    audioVolume: document.getElementById('audio-volume'),
     nowPlayingTitle: document.getElementById('np-title'),
     nowPlayingSub: document.getElementById('np-sub'),
     libraryUser: document.getElementById('library-user'),
@@ -41,6 +43,7 @@ const state = {
     currentIndex: -1,
     repeatMode: 'off',
     dragIndex: null,
+    playlistTagHydrationInFlight: false,
 };
 
 const tagCache = new Map();
@@ -245,6 +248,108 @@ function setEmptyState(element, message) {
     element.append(empty);
 }
 
+function formatDuration(seconds) {
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+        return null;
+    }
+
+    const totalSeconds = Math.floor(seconds);
+    const minutes = Math.floor(totalSeconds / 60);
+    const remainingSeconds = totalSeconds % 60;
+    return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+function formatPlaybackTime(seconds) {
+    return formatDuration(seconds) || '0:00';
+}
+
+function updateAudioControls() {
+    const currentTime = elements.audioController.currentTime;
+    const duration = elements.audioController.duration;
+    const hasDuration = Number.isFinite(duration) && duration > 0;
+
+    if (elements.audioSeek) {
+        elements.audioSeek.value = hasDuration ? String((currentTime / duration) * 100) : '0';
+    }
+
+    if (elements.audioTime) {
+        elements.audioTime.textContent = `${formatPlaybackTime(currentTime)} / ${formatPlaybackTime(duration)}`;
+    }
+
+    if (elements.audioPlayToggle) {
+        const isPaused = elements.audioController.paused;
+        elements.audioPlayToggle.textContent = isPaused ? '▶' : '❚❚';
+        elements.audioPlayToggle.setAttribute('aria-label', isPaused ? 'Play' : 'Pause');
+        elements.audioPlayToggle.title = isPaused ? 'Play' : 'Pause';
+    }
+}
+
+function initializeCustomAudioControls() {
+    if (elements.audioVolume) {
+        elements.audioController.volume = Number(elements.audioVolume.value || 1);
+        elements.audioVolume.addEventListener('input', (event) => {
+            const nextVolume = Number(event.target.value);
+            elements.audioController.volume = Number.isFinite(nextVolume) ? nextVolume : 1;
+        });
+    }
+
+    if (elements.audioPlayToggle) {
+        elements.audioPlayToggle.addEventListener('click', async () => {
+            if (elements.audioController.paused) {
+                try {
+                    await elements.audioController.play();
+                } catch {
+                    // autoplay restrictions may block play
+                }
+            } else {
+                elements.audioController.pause();
+            }
+            updateAudioControls();
+        });
+    }
+
+    if (elements.audioSeek) {
+        elements.audioSeek.addEventListener('input', (event) => {
+            const duration = elements.audioController.duration;
+            if (!Number.isFinite(duration) || duration <= 0) {
+                return;
+            }
+
+            const ratio = Number(event.target.value) / 100;
+            elements.audioController.currentTime = Math.max(0, Math.min(duration, duration * ratio));
+            updateAudioControls();
+        });
+    }
+
+    elements.audioController.addEventListener('timeupdate', updateAudioControls);
+    elements.audioController.addEventListener('loadedmetadata', updateAudioControls);
+    elements.audioController.addEventListener('play', updateAudioControls);
+    elements.audioController.addEventListener('pause', updateAudioControls);
+    elements.audioController.addEventListener('emptied', updateAudioControls);
+
+    updateAudioControls();
+}
+
+function normalizeTextForCompare(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/gu, ' ')
+        .trim();
+}
+
+function isRedundantText(value, comparisons = []) {
+    const normalizedValue = normalizeTextForCompare(value);
+
+    if (!normalizedValue) {
+        return true;
+    }
+
+    return comparisons
+        .map((entry) => normalizeTextForCompare(entry))
+        .filter(Boolean)
+        .some((entry) => entry.includes(normalizedValue) || normalizedValue.includes(entry));
+}
+
 function updateNowPlaying(item = null) {
     if (!item) {
         elements.nowPlayingTitle.textContent = '—';
@@ -255,11 +360,88 @@ function updateNowPlaying(item = null) {
     const title = getTrackTitle(item.track);
     const artist = getTrackArtist(item.track, item.artist.name);
     const album = getTrackAlbum(item.track, item.album.name);
+    const trackNumber = getTrackNumber(item.track);
+    const duration = formatDuration(elements.audioController.duration);
+    const subtitleParts = [];
+
+    if (!isRedundantText(artist, [title])) {
+        subtitleParts.push(artist);
+    }
+
+    if (!isRedundantText(album, [title, artist])) {
+        subtitleParts.push(album);
+    }
+
+    const metadataParts = [];
+    const metadataSet = new Set();
+    const addMetadataPart = (value) => {
+        const text = String(value || '').trim();
+
+        if (!text) {
+            return;
+        }
+
+        const normalized = normalizeTextForCompare(text);
+        if (!normalized || metadataSet.has(normalized)) {
+            return;
+        }
+
+        metadataSet.add(normalized);
+        metadataParts.push(text);
+    };
+
+    if (trackNumber != null) {
+        addMetadataPart(`Track ${trackNumber}`);
+    }
+    if (item.track?._tags?.year) {
+        addMetadataPart(String(item.track._tags.year));
+    }
+    if (item.track?._tags?.genre) {
+        addMetadataPart(String(item.track._tags.genre));
+    }
+    if (duration) {
+        addMetadataPart(duration);
+    }
+
+    const contextText = subtitleParts.join(' — ');
+    const detailText = metadataParts.join(' • ');
 
     elements.nowPlayingTitle.textContent = title;
-    elements.nowPlayingSub.textContent = [artist, album].filter(Boolean).join(' — ') || ' ';
+    elements.nowPlayingSub.textContent = [contextText, detailText].filter(Boolean).join(' • ') || artist || album || detailText || 'Tag details pending…';
     elements.audioController.title = `Now playing: ${title}`;
     elements.audioController.setAttribute('aria-label', `Now playing: ${title}`);
+}
+
+async function hydratePlaylistTrackTags() {
+    if (state.playlistTagHydrationInFlight || state.playlist.length === 0) {
+        return;
+    }
+
+    const tracksMissingTags = state.playlist.map((item) => item.track).filter((track) => track && !track._tags);
+
+    if (tracksMissingTags.length === 0) {
+        return;
+    }
+
+    state.playlistTagHydrationInFlight = true;
+
+    try {
+        await mapLimit(tracksMissingTags, 4, async (track) => {
+            try {
+                track._tags = await getTagsFast(track);
+            } catch (error) {
+                console.warn('Playlist tag read failed:', track?.name, error);
+            }
+        });
+
+        renderPlaylist();
+
+        if (state.currentIndex >= 0) {
+            updateNowPlaying(state.playlist[state.currentIndex]);
+        }
+    } finally {
+        state.playlistTagHydrationInFlight = false;
+    }
 }
 
 function readTagsFromBlob(blob) {
@@ -318,13 +500,25 @@ async function mapLimit(items, limit, fn) {
 }
 
 function updateRepeatButton(button) {
-    const labels = {
-        off: 'Repeat off',
-        all: 'Repeat all',
-        one: 'Repeat one',
+    const states = {
+        off: {
+            label: 'Repeat off',
+            icon: '↻',
+        },
+        all: {
+            label: 'Repeat all',
+            icon: '🔁',
+        },
+        one: {
+            label: 'Repeat one',
+            icon: '🔂',
+        },
     };
 
-    button.querySelector('span').textContent = labels[state.repeatMode];
+    const current = states[state.repeatMode] || states.off;
+    button.querySelector('span').textContent = current.icon;
+    button.setAttribute('aria-label', current.label);
+    button.title = current.label;
     button.classList.toggle('repeat-mode-active', state.repeatMode !== 'off');
 }
 
@@ -333,20 +527,24 @@ function createPlaylistControls() {
 
     const previousButton = document.createElement('button');
     previousButton.type = 'button';
-    previousButton.className = 'control';
-    previousButton.innerHTML = '<span>Previous</span>';
+    previousButton.className = 'control icon-control';
+    previousButton.innerHTML = '<span aria-hidden="true">⏮</span>';
+    previousButton.setAttribute('aria-label', 'Previous');
+    previousButton.title = 'Previous';
     previousButton.addEventListener('click', () => previousTrack());
 
     const nextButton = document.createElement('button');
     nextButton.type = 'button';
-    nextButton.className = 'control';
-    nextButton.innerHTML = '<span>Next</span>';
+    nextButton.className = 'control icon-control';
+    nextButton.innerHTML = '<span aria-hidden="true">⏭</span>';
+    nextButton.setAttribute('aria-label', 'Next');
+    nextButton.title = 'Next';
     nextButton.addEventListener('click', () => nextTrack());
 
     const repeatButton = document.createElement('button');
     repeatButton.type = 'button';
-    repeatButton.className = 'control';
-    repeatButton.innerHTML = '<span></span>';
+    repeatButton.className = 'control icon-control';
+    repeatButton.innerHTML = '<span aria-hidden="true"></span>';
     repeatButton.addEventListener('click', () => {
         const currentIndex = repeatModes.indexOf(state.repeatMode);
         state.repeatMode = repeatModes[(currentIndex + 1) % repeatModes.length];
@@ -356,8 +554,10 @@ function createPlaylistControls() {
 
     const clearButton = document.createElement('button');
     clearButton.type = 'button';
-    clearButton.className = 'control';
-    clearButton.innerHTML = '<span>Clear playlist</span>';
+    clearButton.className = 'control icon-control';
+    clearButton.innerHTML = '<span aria-hidden="true">🗑</span>';
+    clearButton.setAttribute('aria-label', 'Clear playlist');
+    clearButton.title = 'Clear playlist';
     clearButton.addEventListener('click', () => clearPlaylist());
 
     elements.playlistControls.append(previousButton, nextButton, repeatButton, clearButton);
@@ -487,7 +687,7 @@ function renderAlbums() {
     clearElement(elements.albumList);
 
     if (!state.selectedArtist) {
-        elements.artistSummary.textContent = 'Select an artist';
+        elements.artistSummary.textContent = 'Artist: Select an artist';
         setEmptyState(elements.albumList, 'Albums will appear here.');
         return;
     }
@@ -508,7 +708,7 @@ function renderAlbums() {
     headerRow.append(playHeader, addHeader, albumHeader);
     header.append(headerRow);
 
-    elements.artistSummary.textContent = state.selectedArtist.name;
+    elements.artistSummary.textContent = `Artist: ${state.selectedArtist.name}`;
     table.className = 'table table-hover';
 
     state.albums.forEach((album) => {
@@ -555,14 +755,14 @@ function renderTracks() {
     clearElement(elements.trackList);
 
     if (!state.selectedAlbum) {
-        elements.albumTitle.textContent = 'Select an album';
+        elements.albumTitle.textContent = 'Album: Select an album';
         elements.albumPlay.classList.add('hidden');
         elements.albumAdd.classList.add('hidden');
         setEmptyState(elements.trackList, 'Tracks will appear here.');
         return;
     }
 
-    elements.albumTitle.textContent = state.selectedAlbum.name;
+    elements.albumTitle.textContent = `Album: ${state.selectedAlbum.name}`;
     elements.albumPlay.classList.remove('hidden');
     elements.albumAdd.classList.remove('hidden');
 
@@ -726,6 +926,10 @@ function renderPlaylist() {
 
     table.append(header, body);
     elements.playList.append(table);
+
+    hydratePlaylistTrackTags().catch((error) => {
+        console.warn('Unable to hydrate playlist tags:', error);
+    });
 }
 
 function movePlaylistItem(fromIndex, toIndex) {
@@ -814,6 +1018,7 @@ function clearPlaylist() {
     elements.audioController.pause();
     elements.audioController.removeAttribute('src');
     elements.audioController.load();
+    updateAudioControls();
     updateNowPlaying(null);
     renderPlaylist();
 }
@@ -1038,8 +1243,14 @@ async function initializeLibrary() {
     });
 
     elements.audioController.addEventListener('ended', () => nextTrack());
+    elements.audioController.addEventListener('loadedmetadata', () => {
+        if (state.currentIndex >= 0) {
+            updateNowPlaying(state.playlist[state.currentIndex]);
+        }
+    });
 
     createPlaylistControls();
+    initializeCustomAudioControls();
     renderAlbums();
     renderTracks();
     renderPlaylist();
