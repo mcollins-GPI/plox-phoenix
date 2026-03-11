@@ -71,6 +71,36 @@ function normalizeBasePath(value) {
     return withLeadingSlash.replace(/\/+$/u, '');
 }
 
+function prefixedUrl(url) {
+    if (clientApiBasePath === '/') {
+        return url;
+    }
+
+    return `${clientApiBasePath}${url}`.replace(/\/+/gu, '/');
+}
+
+function registerAliasedRoute(method, url, optionsOrHandler, maybeHandler) {
+    const hasOptions = typeof optionsOrHandler !== 'function';
+    const options = hasOptions ? { ...optionsOrHandler } : {};
+    const handler = hasOptions ? maybeHandler : optionsOrHandler;
+
+    fastify.route({
+        method,
+        url,
+        ...options,
+        handler,
+    });
+
+    if (clientApiBasePath !== '/') {
+        fastify.route({
+            method,
+            url: prefixedUrl(url),
+            ...options,
+            handler,
+        });
+    }
+}
+
 function validatePassword(password) {
     if (typeof password !== 'string' || password.length < PASSWORD_MIN_LENGTH) {
         throw new Error(`Passwords must be at least ${PASSWORD_MIN_LENGTH} characters long.`);
@@ -418,7 +448,7 @@ fastify.get('/account', async (request, reply) => {
     reply.redirect('/account/');
 });
 
-fastify.get('/runtime-config.js', async (request, reply) => {
+registerAliasedRoute('GET', '/runtime-config.js', async (request, reply) => {
     const payload = `window.DropsonicRuntime = Object.assign({}, window.DropsonicRuntime, { apiBasePath: ${JSON.stringify(clientApiBasePath)} });`;
     reply
         .type('application/javascript; charset=utf-8')
@@ -426,15 +456,7 @@ fastify.get('/runtime-config.js', async (request, reply) => {
         .send(payload);
 });
 
-fastify.get('/data/runtime-config.js', async (request, reply) => {
-    const payload = `window.DropsonicRuntime = Object.assign({}, window.DropsonicRuntime, { apiBasePath: ${JSON.stringify(clientApiBasePath)} });`;
-    reply
-        .type('application/javascript; charset=utf-8')
-        .header('Cache-Control', 'no-store')
-        .send(payload);
-});
-
-fastify.get('/api/auth/status', async () => {
+registerAliasedRoute('GET', '/api/auth/status', async () => {
     const users = await listUsers();
 
     return {
@@ -443,7 +465,7 @@ fastify.get('/api/auth/status', async () => {
     };
 });
 
-fastify.post('/api/auth/bootstrap', async (request, reply) => {
+registerAliasedRoute('POST', '/api/auth/bootstrap', async (request, reply) => {
     const users = await listUsers();
 
     if (users.length > 0) {
@@ -480,7 +502,7 @@ fastify.post('/api/auth/bootstrap', async (request, reply) => {
     }
 });
 
-fastify.post('/api/auth/login', async (request, reply) => {
+registerAliasedRoute('POST', '/api/auth/login', async (request, reply) => {
     try {
         const username = normalizeUsername(request.body?.user);
         const password = String(request.body?.password || '');
@@ -514,11 +536,11 @@ fastify.post('/api/auth/login', async (request, reply) => {
     }
 });
 
-fastify.get('/api/auth/me', { preHandler: requireAuth }, async (request) => {
+registerAliasedRoute('GET', '/api/auth/me', { preHandler: requireAuth }, async (request) => {
     return { user: sanitizeUser(request.userRecord) };
 });
 
-fastify.post('/api/auth/password', { preHandler: requireAuth }, async (request, reply) => {
+registerAliasedRoute('POST', '/api/auth/password', { preHandler: requireAuth }, async (request, reply) => {
     try {
         const currentPassword = String(request.body?.currentPassword || '');
         const newPassword = String(request.body?.newPassword || '');
@@ -544,12 +566,12 @@ fastify.post('/api/auth/password', { preHandler: requireAuth }, async (request, 
     }
 });
 
-fastify.get('/api/admin/users', { preHandler: requireAdmin }, async () => {
+registerAliasedRoute('GET', '/api/admin/users', { preHandler: requireAdmin }, async () => {
     const users = await listUsers();
     return { users: users.map(sanitizeUser) };
 });
 
-fastify.post('/api/admin/users', { preHandler: requireAdmin }, async (request, reply) => {
+registerAliasedRoute('POST', '/api/admin/users', { preHandler: requireAdmin }, async (request, reply) => {
     try {
         const user = normalizeUsername(request.body?.user);
         const password = request.body?.password;
@@ -581,7 +603,7 @@ fastify.post('/api/admin/users', { preHandler: requireAdmin }, async (request, r
     }
 });
 
-fastify.patch('/api/admin/users/:user', { preHandler: requireAdmin }, async (request, reply) => {
+registerAliasedRoute('PATCH', '/api/admin/users/:user', { preHandler: requireAdmin }, async (request, reply) => {
     try {
         const targetUserName = normalizeUsername(request.params.user);
         const targetUser = await getUser(targetUserName);
@@ -611,7 +633,7 @@ fastify.patch('/api/admin/users/:user', { preHandler: requireAdmin }, async (req
     }
 });
 
-fastify.post('/api/admin/users/:user/reset', { preHandler: requireAdmin }, async (request, reply) => {
+registerAliasedRoute('POST', '/api/admin/users/:user/reset', { preHandler: requireAdmin }, async (request, reply) => {
     try {
         const targetUserName = normalizeUsername(request.params.user);
         const targetUser = await getUser(targetUserName);
@@ -638,7 +660,7 @@ fastify.post('/api/admin/users/:user/reset', { preHandler: requireAdmin }, async
     }
 });
 
-fastify.delete('/api/admin/users/:user', { preHandler: requireAdmin }, async (request, reply) => {
+registerAliasedRoute('DELETE', '/api/admin/users/:user', { preHandler: requireAdmin }, async (request, reply) => {
     try {
         const targetUserName = normalizeUsername(request.params.user);
         const targetUser = await getUser(targetUserName);
@@ -661,7 +683,7 @@ fastify.delete('/api/admin/users/:user', { preHandler: requireAdmin }, async (re
     }
 });
 
-fastify.get('/artist', { preHandler: requireAuth }, async (request, reply) => {
+registerAliasedRoute('GET', '/artist', { preHandler: requireAuth }, async (request, reply) => {
     try {
         const artistList = await ensureArtistCache();
         reply.send({ artist_list: artistList });
@@ -670,7 +692,7 @@ fastify.get('/artist', { preHandler: requireAuth }, async (request, reply) => {
     }
 });
 
-fastify.get('/refresh-artist', { preHandler: requireAdmin }, async (request, reply) => {
+registerAliasedRoute('GET', '/refresh-artist', { preHandler: requireAdmin }, async (request, reply) => {
     try {
         const artistList = await ensureArtistCache(true);
         reply.send({ artist_list: artistList });
@@ -679,7 +701,7 @@ fastify.get('/refresh-artist', { preHandler: requireAdmin }, async (request, rep
     }
 });
 
-fastify.get('/album', { preHandler: requireAuth }, async (request, reply) => {
+registerAliasedRoute('GET', '/album', { preHandler: requireAuth }, async (request, reply) => {
     try {
         const artist = request.query.artist || request.headers.artist;
         const albums = await getFolders(artist);
@@ -689,7 +711,7 @@ fastify.get('/album', { preHandler: requireAuth }, async (request, reply) => {
     }
 });
 
-fastify.get('/tracks', { preHandler: requireAuth }, async (request, reply) => {
+registerAliasedRoute('GET', '/tracks', { preHandler: requireAuth }, async (request, reply) => {
     try {
         const artist = request.query.artist || request.headers.artist;
         const album = request.query.album || request.headers.album;
@@ -700,7 +722,7 @@ fastify.get('/tracks', { preHandler: requireAuth }, async (request, reply) => {
     }
 });
 
-fastify.get('/track', { preHandler: requireAuth }, async (request, reply) => {
+registerAliasedRoute('GET', '/track', { preHandler: requireAuth }, async (request, reply) => {
     const trackPath = request.query.path || request.headers.path;
     const range = request.headers.range;
 
@@ -722,7 +744,7 @@ fastify.get('/track', { preHandler: requireAuth }, async (request, reply) => {
     }
 });
 
-fastify.get('/track-info', { preHandler: requireAuth }, async (request, reply) => {
+registerAliasedRoute('GET', '/track-info', { preHandler: requireAuth }, async (request, reply) => {
     const trackPath = request.query.path || request.headers.path;
 
     if (!trackPath) {
