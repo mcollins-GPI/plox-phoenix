@@ -16,8 +16,6 @@ const elements = {
     artistSearchClear: document.getElementById('artist-search-clear'),
     albumList: document.getElementById('album-list'),
     albumTitle: document.getElementById('album-title'),
-    albumPlay: document.getElementById('album-play'),
-    albumAdd: document.getElementById('album-add'),
     trackList: document.getElementById('track-list'),
     playList: document.getElementById('playlist'),
     playlistControls: document.getElementById('playlist-controls'),
@@ -30,6 +28,7 @@ const elements = {
     nowPlayingSub: document.getElementById('np-sub'),
     libraryUser: document.getElementById('library-user'),
     logoutButton: document.getElementById('library-logout'),
+    topbar: document.getElementById('library-topbar'),
 };
 
 const state = {
@@ -240,6 +239,11 @@ function clearElement(element) {
     }
 }
 
+function syncStickyOffsets() {
+    const topbarHeight = elements.topbar ? Math.ceil(elements.topbar.getBoundingClientRect().height) : 0;
+    document.documentElement.style.setProperty('--library-topbar-height', `${topbarHeight}px`);
+}
+
 function setEmptyState(element, message) {
     clearElement(element);
     const empty = document.createElement('div');
@@ -360,8 +364,6 @@ function updateNowPlaying(item = null) {
     const title = getTrackTitle(item.track);
     const artist = getTrackArtist(item.track, item.artist.name);
     const album = getTrackAlbum(item.track, item.album.name);
-    const trackNumber = getTrackNumber(item.track);
-    const duration = formatDuration(elements.audioController.duration);
     const subtitleParts = [];
 
     if (!isRedundantText(artist, [title])) {
@@ -390,17 +392,8 @@ function updateNowPlaying(item = null) {
         metadataParts.push(text);
     };
 
-    if (trackNumber != null) {
-        addMetadataPart(`Track ${trackNumber}`);
-    }
     if (item.track?._tags?.year) {
         addMetadataPart(String(item.track._tags.year));
-    }
-    if (item.track?._tags?.genre) {
-        addMetadataPart(String(item.track._tags.genre));
-    }
-    if (duration) {
-        addMetadataPart(duration);
     }
 
     const contextText = subtitleParts.join(' — ');
@@ -615,6 +608,8 @@ function renderArtists() {
         return naturalCompare(left, right);
     });
 
+    const firstRowCount = Math.floor(shortcuts.length / 2);
+
     shortcuts.forEach((shortcut, index) => {
         const link = document.createElement('div');
         link.className = 'letter-link';
@@ -627,7 +622,7 @@ function renderArtists() {
             }
         });
 
-        const targetNav = index >= Math.ceil(shortcuts.length / 2) ? elements.artistNavigation[1] : elements.artistNavigation[0];
+        const targetNav = index >= firstRowCount ? elements.artistNavigation[1] : elements.artistNavigation[0];
         targetNav.append(link);
     });
 
@@ -756,15 +751,11 @@ function renderTracks() {
 
     if (!state.selectedAlbum) {
         elements.albumTitle.textContent = 'Album: Select an album';
-        elements.albumPlay.classList.add('hidden');
-        elements.albumAdd.classList.add('hidden');
         setEmptyState(elements.trackList, 'Tracks will appear here.');
         return;
     }
 
     elements.albumTitle.textContent = `Album: ${state.selectedAlbum.name}`;
-    elements.albumPlay.classList.remove('hidden');
-    elements.albumAdd.classList.remove('hidden');
 
     const table = document.createElement('table');
     const header = document.createElement('thead');
@@ -1196,6 +1187,11 @@ async function initializeLibrary() {
         });
     }
 
+    syncStickyOffsets();
+    window.addEventListener('resize', syncStickyOffsets);
+    window.addEventListener('orientationchange', syncStickyOffsets);
+    requestAnimationFrame(syncStickyOffsets);
+
     state.artistSearchQuery = '';
     if (elements.artistSearch) {
         elements.artistSearch.value = '';
@@ -1229,18 +1225,6 @@ async function initializeLibrary() {
             renderArtists();
         });
     }
-
-    elements.albumPlay.addEventListener('click', () => {
-        if (state.selectedArtist && state.selectedAlbum && state.tracks.length > 0) {
-            playTracks(state.tracks, state.selectedArtist, state.selectedAlbum);
-        }
-    });
-
-    elements.albumAdd.addEventListener('click', () => {
-        if (state.selectedArtist && state.selectedAlbum && state.tracks.length > 0) {
-            enqueueTracks(state.selectedArtist, state.selectedAlbum, state.tracks);
-        }
-    });
 
     elements.audioController.addEventListener('ended', () => nextTrack());
     elements.audioController.addEventListener('loadedmetadata', () => {

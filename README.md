@@ -7,9 +7,9 @@
 - artist section
     - search and filter controls sticky while browsing artist list in mobile environment
 - album section
-    - selected artist displayed in section header
+    - selected artist displayed in section header is covered by the page header
 - tracklist section
-    - selected album displayed in section header
+    - selected album displayed in section header is covered by the page header
 - media section
     - none
 - general

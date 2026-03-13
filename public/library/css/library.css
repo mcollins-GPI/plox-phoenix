@@ -10,6 +10,13 @@
     --text-soft: rgba(15, 23, 42, 0.72);
     --media-control-height: 56px;
     --media-control-height-mobile: 48px;
+    --library-topbar-height: 0px;
+    --section-header-font-size: 1.1rem;
+    --section-header-padding-y: 5px;
+    --section-header-padding-x: 10px;
+    --section-header-min-height: 35px;
+    --artist-controls-padding-inline: 12px;
+    --section-header-surface: linear-gradient(180deg, #fcfdff 0%, #f4f7fb 100%);
 }
 
 body {
@@ -19,12 +26,17 @@ body {
     color-scheme: light;
     background: radial-gradient(circle at top left, rgba(177, 29, 48, 0.08), transparent 25%), linear-gradient(180deg, #f8fafc 0%, #eef2f8 100%);
     color: #0f172a;
+    height: 100dvh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
 }
 
 #library-topbar {
     position: sticky;
     top: 0;
     z-index: 20;
+    flex: 0 0 auto;
     border-bottom: 1px solid var(--border);
     background: rgba(248, 250, 252, 0.84);
     backdrop-filter: blur(18px);
@@ -63,7 +75,9 @@ body {
     flex-direction: row;
     flex-wrap: nowrap;
     width: 100%;
-    height: 58vh;
+    height: auto;
+    flex: 1 1 auto;
+    min-height: 0;
     gap: 0;
 }
 
@@ -76,6 +90,7 @@ body {
     width: 25vw;
     border-right: 1px solid var(--border);
     overflow: hidden;
+    min-height: 0;
     display: flex;
     flex-direction: column;
 }
@@ -83,28 +98,47 @@ body {
 #collection-summary {
     display: flex;
     flex-direction: column;
-    font-size: 2.35em;
-    padding: 14px;
-    gap: 8px;
+    font-size: var(--section-header-font-size);
+    padding: 0;
+    gap: 6px;
+    padding-bottom: 0.35rem;
     border-bottom: 1px solid var(--border);
-    background: linear-gradient(180deg, #fff 0%, #fbfbfd 100%);
+    background: var(--section-header-surface);
     position: sticky;
     top: 0;
+    flex: 0 0 auto;
     z-index: 2;
+    box-shadow:
+        inset 0 -1px 0 rgba(15, 23, 42, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+#artist-count {
+    display: flex;
+    align-items: center;
+    height: var(--section-header-min-height);
+    box-sizing: border-box;
+    padding: var(--section-header-padding-y) var(--section-header-padding-x);
+    border-bottom: 1px solid var(--border);
+    background: var(--section-header-surface);
+    box-shadow:
+        inset 0 -1px 0 rgba(15, 23, 42, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
 .artist-navigation {
-    font-size: 0.5em;
+    font-size: 0.95rem;
     display: flex;
     flex-direction: row;
     align-items: center;
-    justify-content: flex-start;
-    gap: 6px;
+    justify-content: space-between;
+    padding: 0 var(--artist-controls-padding-inline);
 }
 
 .artist-search-wrap {
     position: relative;
     line-height: 0;
+    padding: 0 var(--artist-controls-padding-inline);
 }
 
 #artist-search {
@@ -116,7 +150,7 @@ body {
     border: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.96);
     color: #0f172a;
-    font-size: 0.38em;
+    font-size: 0.95rem;
     padding: 0 38px 0 12px;
     outline: 0;
 }
@@ -128,7 +162,7 @@ body {
 
 #artist-search-clear {
     position: absolute;
-    right: 6px;
+    right: 18px;
     top: 50%;
     transform: translateY(-50%);
     width: 26px;
@@ -162,7 +196,8 @@ body {
 
 .artist-navigation .letter-link {
     cursor: pointer;
-    flex: 0 0 auto;
+    flex: 1 1 0;
+    min-width: 0;
     border: 1px solid var(--border);
     display: inline-flex;
     align-items: center;
@@ -170,10 +205,13 @@ body {
     background-color: rgba(15, 23, 42, 0.08);
     transition: 180ms ease;
     border-radius: 999px;
-    width: 26px;
-    height: 26px;
+    width: auto;
+    max-width: 30px;
+    aspect-ratio: 1 / 1;
+    height: auto;
+    font-size: 0.95rem;
     padding: 0;
-    line-height: 1.1;
+    line-height: 1;
 }
 
 .artist-navigation .letter-link:hover {
@@ -187,7 +225,8 @@ body {
 }
 
 #artist-list {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
 }
 
@@ -213,22 +252,34 @@ body {
     width: 25vw;
     border-right: 1px solid var(--border);
     overflow: hidden;
+    min-height: 0;
     display: flex;
     flex-direction: column;
 }
 
 #artist-summary {
-    font-size: 2rem;
+    font-size: var(--section-header-font-size);
     line-height: 1.15;
-    padding: 14px;
+    padding: var(--section-header-padding-y) var(--section-header-padding-x);
     border-bottom: 1px solid var(--border);
-    min-height: 82px;
+    height: var(--section-header-min-height);
+    box-sizing: border-box;
     display: flex;
     align-items: center;
+    position: sticky;
+    top: 0;
+    flex: 0 0 auto;
+    z-index: 2;
+    background: var(--section-header-surface);
+    box-shadow:
+        inset 0 -1px 0 rgba(15, 23, 42, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
 #album-list {
     overflow-y: auto;
+    flex: 1;
+    min-height: 0;
 }
 
 #album-list .album-row {
@@ -248,20 +299,29 @@ body {
     flex-direction: column;
     flex: auto;
     overflow: hidden;
+    min-height: 0;
 }
 
 #track-section .title-container {
-    padding: 14px;
+    padding: var(--section-header-padding-y) var(--section-header-padding-x);
     display: flex;
     gap: 5px;
     align-items: center;
     border-bottom: 1px solid var(--border);
-    min-height: 82px;
-    background: linear-gradient(180deg, #fff 0%, #fbfbfd 100%);
+    height: var(--section-header-min-height);
+    box-sizing: border-box;
+    background: var(--section-header-surface);
+    position: sticky;
+    top: 0;
+    flex: 0 0 auto;
+    z-index: 2;
+    box-shadow:
+        inset 0 -1px 0 rgba(15, 23, 42, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
 #track-section .title-container .title-text {
-    font-size: 2rem;
+    font-size: var(--section-header-font-size);
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -291,7 +351,8 @@ body {
 
 #track-list {
     overflow-y: auto;
-    flex: auto;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 #track-list .table,
@@ -306,8 +367,32 @@ body {
 #track-list thead {
     position: sticky;
     top: 0;
-    background-color: white;
+    background-color: var(--panel-alt);
+    box-shadow: inset 0 -1px 0 rgba(15, 23, 42, 0.08);
     z-index: 1;
+}
+
+#album-list thead {
+    position: sticky;
+    top: 0;
+    background-color: var(--panel-alt);
+    box-shadow: inset 0 -1px 0 rgba(15, 23, 42, 0.08);
+    z-index: 1;
+}
+
+#album-list thead th,
+#track-list thead th {
+    padding: 0.42rem 0.9rem;
+    line-height: 1;
+    vertical-align: middle;
+}
+
+#album-list thead .action-cell,
+#track-list thead .action-cell,
+#track-list thead .track-number-cell {
+    text-align: center;
+    padding-left: 0.42rem;
+    padding-right: 0.42rem;
 }
 
 #track-section .track-row {
@@ -324,7 +409,9 @@ body {
 
 #media-player {
     border-top: 1px solid var(--border);
-    height: 42vh;
+    height: auto;
+    flex: 0 0 42vh;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
@@ -487,7 +574,8 @@ body {
 #playlist thead {
     position: sticky;
     top: 0;
-    background-color: white;
+    background-color: var(--panel-alt);
+    box-shadow: inset 0 -1px 0 rgba(15, 23, 42, 0.08);
     z-index: 1;
 }
 
@@ -641,26 +729,46 @@ thead th {
 
 @media (max-width: 991px) {
     body {
-        overflow: auto;
+        overflow: hidden;
     }
 
     #media-picker {
         flex-direction: column;
         height: auto;
+        flex: 1 1 auto;
+        min-height: 0;
     }
 
     #artist-section,
     #album-section,
     #track-section {
         width: 100%;
-        min-height: 32vh;
+        min-height: 0;
         border-right: 0;
         border-bottom: 1px solid var(--border);
     }
 
+    #artist-section,
+    #album-section {
+        flex: 1 1 0;
+    }
+
+    #track-section {
+        flex: 1.2 1 0;
+    }
+
+    #collection-summary,
+    #artist-summary,
+    #track-section .title-container {
+        position: sticky;
+        top: var(--library-topbar-height);
+        z-index: 9;
+        background: var(--section-header-surface);
+    }
+
     #media-player {
-        height: auto;
-        min-height: 34vh;
+        height: 38vh;
+        min-height: 0;
     }
 
     .section-panel {
@@ -709,17 +817,17 @@ thead th {
     #collection-summary,
     #artist-summary,
     #track-section .title-container {
-        font-size: 1.45rem;
+        font-size: var(--section-header-font-size);
     }
 
     #collection-summary {
-        padding: 12px;
+        padding: var(--section-header-padding-y) var(--section-header-padding-x);
     }
 
     #artist-summary,
     #track-section .title-container {
-        min-height: auto;
-        padding: 12px;
+        min-height: var(--section-header-min-height);
+        padding: var(--section-header-padding-y) var(--section-header-padding-x);
     }
 
     #track-section .title-container {
