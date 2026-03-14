@@ -18,6 +18,7 @@
     - have server request media tags and display them responsively
     - store parsed media information so that it doesn't have to read tags every time
     - stream music from the server instead of loading full track before playback
+    - see what other people are streaming (social features)
 
 ## resources
 
