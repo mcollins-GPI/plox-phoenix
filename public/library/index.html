@@ -13,14 +13,15 @@
         <link rel="stylesheet" href="css/library.css" />
     </head>
     <body>
-        <div id="library-topbar" class="container-fluid py-3 d-flex justify-content-between align-items-center gap-3 flex-wrap">
-            <div>
+        <div id="library-topbar" class="container-fluid py-3 d-flex justify-content-between align-items-center gap-3">
+            <div class="d-flex align-items-center gap-2 topbar-left">
+                <img src="img/favicon.png" alt="Dropsonic" class="topbar-icon" width="24" height="24" />
                 <strong class="library-title">Dropsonic Library</strong>
                 <span id="library-user" class="text-muted ms-2"></span>
             </div>
             <div class="d-flex gap-2 library-topbar-actions">
-                <a class="btn btn-sm btn-outline-secondary" href="../account/">Account</a>
-                <button id="library-logout" class="btn btn-sm btn-outline-danger" type="button">Logout</button>
+                <a class="btn btn-sm btn-outline-secondary" href="../account/"><span class="btn-label">Account</span><span class="btn-icon" aria-hidden="true">&#9881;</span></a>
+                <button id="library-logout" class="btn btn-sm btn-outline-danger" type="button"><span class="btn-label">Logout</span><span class="btn-icon" aria-hidden="true">&#10140;</span></button>
             </div>
         </div>
         <div id="media-picker">
@@ -48,9 +49,13 @@
             </div>
             <div id="media-player" class="section-panel">
                 <div id="control-container">
-                    <button id="mini-play-toggle" class="audio-btn mini-transport" type="button" aria-label="Play" title="Play">▶</button>
+                    <button id="mini-play-toggle" class="audio-btn mini-transport" type="button" aria-label="Play" title="Play">
+                        <svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.5 3.5v17l13-8.5z" /></svg>
+                    </button>
                     <div id="audio-player-shell" aria-label="Audio player">
-                        <button id="audio-play-toggle" class="audio-btn" type="button" aria-label="Play" title="Play">▶</button>
+                        <button id="audio-play-toggle" class="audio-btn" type="button" aria-label="Play" title="Play">
+                            <svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.5 3.5v17l13-8.5z" /></svg>
+                        </button>
                         <input id="audio-seek" class="audio-seek" type="range" min="0" max="100" value="0" step="0.1" aria-label="Seek" />
                         <div id="audio-time" class="audio-time" aria-live="off">0:00 / 0:00</div>
                         <input id="audio-volume" class="audio-volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="Volume" />

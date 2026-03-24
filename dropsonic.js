@@ -21,6 +21,16 @@ const AUDIO_MIME_TYPES = {
     webm: 'audio/webm',
 };
 
+const BUFFERED_EXTENSIONS = new Set(['m4a', 'aac', 'mp4', 'webm']);
+
+function needsBuffering(filePath) {
+    const ext = String(filePath || '')
+        .split('.')
+        .pop()
+        .toLowerCase();
+    return BUFFERED_EXTENSIONS.has(ext);
+}
+
 function getMimeType(filePath) {
     const ext = String(filePath || '')
         .split('.')
@@ -452,6 +462,14 @@ async function getFileInfo(searchPath) {
     return response.result;
 }
 
+function normalizeEntryNames(entries) {
+    return entries.map((entry) => ({
+        ...entry,
+        name: entry.name ? entry.name.normalize('NFC') : entry.name,
+        path_display: entry.path_display ? entry.path_display.normalize('NFC') : entry.path_display,
+    }));
+}
+
 function getFolders(artist, album) {
     let fileList = [];
     const searchPath = `${artist ? `${album ? `/music/${artist}/${album}` : `/music/${artist}`}` : '/music'}`;
@@ -466,7 +484,7 @@ function getFolders(artist, album) {
                 return getMoreFolders(response.result.cursor);
             }
 
-            return fileList;
+            return normalizeEntryNames(fileList);
         });
     }
 
@@ -479,7 +497,7 @@ function getFolders(artist, album) {
             return getMoreFolders(response.result.cursor);
         }
 
-        return fileList;
+        return normalizeEntryNames(fileList);
     });
 }
 
@@ -832,8 +850,37 @@ registerAliasedRoute('GET', '/stream', async (request, reply) => {
 
     try {
         const range = request.headers.range;
-        const result = await getFileStream(trackPath, range);
         const contentType = getMimeType(trackPath);
+
+        // MP4-container formats (m4a, aac, webm) need the moov atom to be
+        // seekable. Buffer the full file so the browser can issue Range
+        // requests against a known Content-Length.
+        if (needsBuffering(trackPath)) {
+            if (range) {
+                // Serve a byte-range slice from Dropbox directly.
+                const result = await getFileStream(trackPath, range);
+                reply.header('Content-Type', contentType);
+                reply.header('Accept-Ranges', 'bytes');
+                reply.code(206);
+                const contentRange = result.headers.get('content-range');
+                const contentLength = result.headers.get('content-length');
+                if (contentRange) reply.header('Content-Range', contentRange);
+                if (contentLength) reply.header('Content-Length', contentLength);
+                const nodeStream = result.body instanceof Readable ? result.body : Readable.fromWeb(result.body);
+                return reply.send(nodeStream);
+            }
+
+            // No Range header — download the whole file and send as a buffer
+            // so the browser learns the total size and can seek.
+            const result = await getFile(trackPath);
+            reply.header('Content-Type', contentType);
+            reply.header('Accept-Ranges', 'bytes');
+            reply.header('Content-Length', result.buffer.length);
+            return reply.send(result.buffer);
+        }
+
+        // Streamable formats (mp3, flac, ogg, etc.) — pipe directly.
+        const result = await getFileStream(trackPath, range);
 
         reply.header('Content-Type', contentType);
         reply.header('Accept-Ranges', 'bytes');

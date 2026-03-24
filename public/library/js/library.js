@@ -7,6 +7,19 @@ const imageFileTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 const fileTypesToExclude = [...nonMusicFileTypes, ...imageFileTypes];
 const repeatModes = ['off', 'all', 'one'];
 
+const ICONS = {
+    play: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.5 3.5v17l13-8.5z"/></svg>',
+    pause: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="3" width="4.5" height="18" rx="1.2"/><rect x="14.5" y="3" width="4.5" height="18" rx="1.2"/></svg>',
+    skipBack: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="2" y="4" width="2.5" height="16" rx=".8"/><path d="M21 3v18L8 12z"/></svg>',
+    skipForward: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3v18l13-9z"/><rect x="19.5" y="4" width="2.5" height="16" rx=".8"/></svg>',
+    repeat: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
+    repeatOne:
+        '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><text x="12" y="14.5" text-anchor="middle" fill="currentColor" stroke="none" font-size="8" font-weight="700" font-family="system-ui">1</text></svg>',
+    trash: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>',
+    plus: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+    remove: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+};
+
 const elements = {
     artistCount: document.getElementById('artist-count'),
     artistList: document.getElementById('artist-list'),
@@ -234,11 +247,11 @@ function sortTracks(tracks) {
         });
 }
 
-function createMiniButton(label, ariaLabel, onClick, extraClass = '') {
+function createMiniButton(icon, ariaLabel, onClick, extraClass = '') {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `mini-button ${extraClass}`.trim();
-    button.textContent = label;
+    button.innerHTML = icon;
     button.setAttribute('aria-label', ariaLabel);
     button.addEventListener('click', (event) => {
         event.stopPropagation();
@@ -259,7 +272,16 @@ function syncStickyOffsets() {
 }
 
 function setExpandedSection(sectionId) {
+    const isDesktop = window.matchMedia('(min-width: 992px)').matches;
     const sections = document.querySelectorAll('#media-picker > .section-panel');
+    if (isDesktop) {
+        // On desktop only the media-player toggles
+        const player = document.getElementById('media-player');
+        if (sectionId === 'media-player' || sectionId === null) {
+            player.classList.toggle('section-expanded', sectionId === 'media-player');
+        }
+        return;
+    }
     sections.forEach((section) => {
         section.classList.toggle('section-expanded', section.id === sectionId);
     });
@@ -326,14 +348,14 @@ function updateAudioControls() {
 
     if (elements.audioPlayToggle) {
         const isPaused = elements.audioController.paused;
-        elements.audioPlayToggle.textContent = isPaused ? '▶' : '❚❚';
+        elements.audioPlayToggle.innerHTML = isPaused ? ICONS.play : ICONS.pause;
         elements.audioPlayToggle.setAttribute('aria-label', isPaused ? 'Play' : 'Pause');
         elements.audioPlayToggle.title = isPaused ? 'Play' : 'Pause';
     }
 
     if (elements.miniPlayToggle) {
         const isPaused = elements.audioController.paused;
-        elements.miniPlayToggle.textContent = isPaused ? '▶' : '❚❚';
+        elements.miniPlayToggle.innerHTML = isPaused ? ICONS.play : ICONS.pause;
         elements.miniPlayToggle.setAttribute('aria-label', isPaused ? 'Play' : 'Pause');
         elements.miniPlayToggle.title = isPaused ? 'Play' : 'Pause';
     }
@@ -574,20 +596,20 @@ function updateRepeatButton(button) {
     const states = {
         off: {
             label: 'Repeat off',
-            icon: '↻',
+            icon: ICONS.repeat,
         },
         all: {
             label: 'Repeat all',
-            icon: '🔁',
+            icon: ICONS.repeat,
         },
         one: {
             label: 'Repeat one',
-            icon: '🔂',
+            icon: ICONS.repeatOne,
         },
     };
 
     const current = states[state.repeatMode] || states.off;
-    button.querySelector('span').textContent = current.icon;
+    button.querySelector('span').innerHTML = current.icon;
     button.setAttribute('aria-label', current.label);
     button.title = current.label;
     button.classList.toggle('repeat-mode-active', state.repeatMode !== 'off');
@@ -599,7 +621,7 @@ function createPlaylistControls() {
     const previousButton = document.createElement('button');
     previousButton.type = 'button';
     previousButton.className = 'control icon-control';
-    previousButton.innerHTML = '<span aria-hidden="true">⏮</span>';
+    previousButton.innerHTML = `<span aria-hidden="true">${ICONS.skipBack}</span>`;
     previousButton.setAttribute('aria-label', 'Previous');
     previousButton.title = 'Previous';
     previousButton.addEventListener('click', () => previousTrack());
@@ -607,7 +629,7 @@ function createPlaylistControls() {
     const nextButton = document.createElement('button');
     nextButton.type = 'button';
     nextButton.className = 'control icon-control';
-    nextButton.innerHTML = '<span aria-hidden="true">⏭</span>';
+    nextButton.innerHTML = `<span aria-hidden="true">${ICONS.skipForward}</span>`;
     nextButton.setAttribute('aria-label', 'Next');
     nextButton.title = 'Next';
     nextButton.addEventListener('click', () => nextTrack());
@@ -626,7 +648,7 @@ function createPlaylistControls() {
     const clearButton = document.createElement('button');
     clearButton.type = 'button';
     clearButton.className = 'control icon-control';
-    clearButton.innerHTML = '<span aria-hidden="true">🗑</span>';
+    clearButton.innerHTML = `<span aria-hidden="true">${ICONS.trash}</span>`;
     clearButton.setAttribute('aria-label', 'Clear playlist');
     clearButton.title = 'Clear playlist';
     clearButton.addEventListener('click', () => clearPlaylist());
@@ -775,8 +797,8 @@ function renderAlbums() {
 
     playHeader.className = 'action-cell';
     addHeader.className = 'action-cell';
-    playHeader.textContent = '▶';
-    addHeader.textContent = '＋';
+    playHeader.innerHTML = ICONS.play;
+    addHeader.innerHTML = ICONS.plus;
     albumHeader.textContent = 'Album';
     headerRow.append(playHeader, addHeader, albumHeader);
     header.append(headerRow);
@@ -791,11 +813,11 @@ function renderAlbums() {
 
         const playCell = document.createElement('td');
         playCell.className = 'action-cell';
-        playCell.append(createMiniButton('▶', `Play ${album.name}`, () => queueAlbum(state.selectedArtist, album, true)));
+        playCell.append(createMiniButton(ICONS.play, `Play ${album.name}`, () => queueAlbum(state.selectedArtist, album, true)));
 
         const addCell = document.createElement('td');
         addCell.className = 'action-cell';
-        addCell.append(createMiniButton('＋', `Add ${album.name}`, () => queueAlbum(state.selectedArtist, album, false)));
+        addCell.append(createMiniButton(ICONS.plus, `Add ${album.name}`, () => queueAlbum(state.selectedArtist, album, false)));
 
         const nameCell = document.createElement('td');
         const albumName = document.createElement('div');
@@ -847,9 +869,9 @@ function renderTracks() {
 
     numberHeader.textContent = '#';
     numberHeader.className = 'track-number-cell';
-    playHeader.textContent = '▶';
+    playHeader.innerHTML = ICONS.play;
     playHeader.className = 'action-cell';
-    addHeader.textContent = '＋';
+    addHeader.innerHTML = ICONS.plus;
     addHeader.className = 'action-cell';
     titleHeader.textContent = 'Title';
     headerRow.append(numberHeader, playHeader, addHeader, titleHeader);
@@ -866,11 +888,11 @@ function renderTracks() {
 
         const playCell = document.createElement('td');
         playCell.className = 'action-cell';
-        playCell.append(createMiniButton('▶', `Play ${track.name}`, () => playTracks([track], state.selectedArtist, state.selectedAlbum)));
+        playCell.append(createMiniButton(ICONS.play, `Play ${track.name}`, () => playTracks([track], state.selectedArtist, state.selectedAlbum)));
 
         const addCell = document.createElement('td');
         addCell.className = 'action-cell';
-        addCell.append(createMiniButton('＋', `Add ${track.name}`, () => enqueueTrack(state.selectedArtist, state.selectedAlbum, track)));
+        addCell.append(createMiniButton(ICONS.plus, `Add ${track.name}`, () => enqueueTrack(state.selectedArtist, state.selectedAlbum, track)));
 
         const titleCell = document.createElement('td');
         const title = document.createElement('div');
@@ -987,7 +1009,7 @@ function renderPlaylist() {
 
         const removeCell = document.createElement('td');
         removeCell.className = 'playlist-remove-cell';
-        removeCell.append(createMiniButton('✕', `Remove ${item.track.name}`, () => removePlaylistItem(index), 'danger'));
+        removeCell.append(createMiniButton(ICONS.remove, `Remove ${item.track.name}`, () => removePlaylistItem(index), 'danger'));
 
         row.append(dragCell, orderCell, titleCell, artistCell, albumCell, removeCell);
         body.append(row);
@@ -1094,6 +1116,13 @@ function playTracks(tracks, artist, album) {
     enqueueTracks(artist, album, tracks, { replace: true, playNow: true });
 }
 
+function fetchTrackAsBlob(trackPath) {
+    const url = buildUrl('track', { path: trackPath });
+    return apiFetch(url)
+        .then((r) => r.blob())
+        .then((blob) => URL.createObjectURL(blob));
+}
+
 async function playIndex(index) {
     if (index < 0 || index >= state.playlist.length) {
         return;
@@ -1122,6 +1151,29 @@ async function playIndex(index) {
             state.preloadedIndex = -1;
             elements.audioPreload.removeAttribute('src');
             elements.audioPreload.load();
+
+            // If the stream fails to load, fall back to buffered fetch
+            await new Promise((resolve, reject) => {
+                const onCanPlay = () => {
+                    cleanup();
+                    resolve();
+                };
+                const onError = () => {
+                    cleanup();
+                    reject(new Error('stream failed'));
+                };
+                const cleanup = () => {
+                    elements.audioController.removeEventListener('canplay', onCanPlay);
+                    elements.audioController.removeEventListener('error', onError);
+                };
+                elements.audioController.addEventListener('canplay', onCanPlay, { once: true });
+                elements.audioController.addEventListener('error', onError, { once: true });
+            }).catch(async () => {
+                console.warn('Stream failed, falling back to buffered fetch:', item.track.path_lower);
+                const blobUrl = await fetchTrackAsBlob(item.track.path_lower);
+                elements.audioController.src = blobUrl;
+                elements.audioController.load();
+            });
         }
 
         try {
