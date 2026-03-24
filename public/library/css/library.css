@@ -1005,6 +1005,10 @@ thead th {
     outline-offset: -2px;
 }
 
+.dragging {
+    opacity: 0.5;
+}
+
 .empty-state {
     padding: 1rem;
 }
@@ -1129,6 +1133,32 @@ thead th {
     .section-expanded #playlist-controls .icon-control span {
         font-size: inherit;
     }
+
+    /* Tighten playlist table at narrow widths */
+    #playlist .table > :not(caption) > * > * {
+        padding: 0.55rem 0.5rem;
+    }
+
+    /* Hide drag column */
+    .playlist-drag-cell {
+        display: none;
+    }
+}
+
+@media (max-width: 540px) {
+    /* Hide album column */
+    #playlist .table td:nth-child(5),
+    #playlist .table th:nth-child(5) {
+        display: none;
+    }
+
+    /* Truncate track title */
+    .playlist-track-title {
+        max-width: 140px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
 }
 
 @media (max-width: 500px) {
@@ -1158,6 +1188,12 @@ thead th {
     /* Hide skip/repeat/trash when collapsed */
     .section-panel:not(.section-expanded) #playlist-controls {
         display: none !important;
+    }
+
+    /* Hide artist column at narrowest widths */
+    #playlist .table td:nth-child(4),
+    #playlist .table th:nth-child(4) {
+        display: none;
     }
 }
 

@@ -971,11 +971,18 @@ function renderPlaylist() {
         row.className = 'track-row';
         row.draggable = true;
         row.classList.toggle('playing', index === state.currentIndex);
-        row.addEventListener('dragstart', () => {
+        row.addEventListener('dragstart', (event) => {
             state.dragIndex = index;
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', index.toString());
+            row.classList.add('dragging');
+        });
+        row.addEventListener('dragend', () => {
+            row.classList.remove('dragging');
         });
         row.addEventListener('dragover', (event) => {
             event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
             row.classList.add('drag-over');
         });
         row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
