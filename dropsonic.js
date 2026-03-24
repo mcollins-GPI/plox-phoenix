@@ -403,11 +403,28 @@ async function requireAdmin(request, reply) {
     }
 }
 
+function escapeNonAscii(str) {
+    return str.replace(/[^\x20-\x7E]/gu, (ch) => {
+        const code = ch.codePointAt(0);
+        if (code <= 0xffff) {
+            return `\\u${code.toString(16).padStart(4, '0')}`;
+        }
+        // Surrogate pair for characters above BMP
+        const hi = Math.floor((code - 0x10000) / 0x400) + 0xd800;
+        const lo = ((code - 0x10000) % 0x400) + 0xdc00;
+        return `\\u${hi.toString(16)}\\u${lo.toString(16)}`;
+    });
+}
+
+function buildDropboxApiArg(obj) {
+    return escapeNonAscii(JSON.stringify(obj));
+}
+
 async function getFile(searchPath, rangeHeader) {
     const token = await dropbox.auth.getAccessToken();
     const headers = {
         Authorization: `Bearer ${token}`,
-        'Dropbox-API-Arg': JSON.stringify({ path: searchPath }),
+        'Dropbox-API-Arg': buildDropboxApiArg({ path: searchPath }),
     };
 
     if (rangeHeader) {
@@ -434,7 +451,7 @@ async function getFileStream(searchPath, rangeHeader) {
     const token = await dropbox.auth.getAccessToken();
     const headers = {
         Authorization: `Bearer ${token}`,
-        'Dropbox-API-Arg': JSON.stringify({ path: searchPath }),
+        'Dropbox-API-Arg': buildDropboxApiArg({ path: searchPath }),
     };
 
     if (rangeHeader) {

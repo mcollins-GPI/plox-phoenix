@@ -458,10 +458,50 @@ function isRedundantText(value, comparisons = []) {
         .some((entry) => entry.includes(normalizedValue) || normalizedValue.includes(entry));
 }
 
+function setNowPlayingText(el, text) {
+    el.textContent = '';
+    el.classList.remove('scrolling');
+    el.style.removeProperty('--scroll-dist');
+    el.style.removeProperty('--scroll-duration');
+    const inner = document.createElement('span');
+    inner.className = 'np-scroll-inner';
+    inner.textContent = text;
+    el.appendChild(inner);
+}
+
+function applyNowPlayingScroll() {
+    // Cancel any pending scroll check from a previous call
+    if (applyNowPlayingScroll._raf) {
+        cancelAnimationFrame(applyNowPlayingScroll._raf);
+    }
+
+    applyNowPlayingScroll._raf = requestAnimationFrame(() => {
+        applyNowPlayingScroll._raf = requestAnimationFrame(() => {
+            applyNowPlayingScroll._raf = null;
+
+            [elements.nowPlayingTitle, elements.nowPlayingSub].forEach((el) => {
+                el.classList.remove('scrolling');
+                el.style.removeProperty('--scroll-dist');
+                el.style.removeProperty('--scroll-duration');
+
+                // el is a block div with overflow:hidden — scrollWidth = full content width
+                const overflow = el.scrollWidth - el.clientWidth;
+
+                if (overflow > 1) {
+                    const duration = Math.max(6, overflow / 30 + 4);
+                    el.style.setProperty('--scroll-dist', `-${overflow}px`);
+                    el.style.setProperty('--scroll-duration', `${duration.toFixed(1)}s`);
+                    el.classList.add('scrolling');
+                }
+            });
+        });
+    });
+}
+
 function updateNowPlaying(item = null) {
     if (!item) {
-        elements.nowPlayingTitle.textContent = '—';
-        elements.nowPlayingSub.textContent = '—';
+        setNowPlayingText(elements.nowPlayingTitle, '—');
+        setNowPlayingText(elements.nowPlayingSub, '—');
         return;
     }
 
@@ -503,19 +543,10 @@ function updateNowPlaying(item = null) {
     const contextText = subtitleParts.join(' — ');
     const detailText = metadataParts.join(' • ');
 
-    elements.nowPlayingTitle.textContent = title;
-    elements.nowPlayingSub.textContent = [contextText, detailText].filter(Boolean).join(' • ') || artist || album || detailText || 'Tag details pending…';
+    setNowPlayingText(elements.nowPlayingTitle, title);
+    setNowPlayingText(elements.nowPlayingSub, [contextText, detailText].filter(Boolean).join(' • ') || artist || album || detailText || 'Tag details pending…');
 
-    requestAnimationFrame(() => {
-        const el = elements.nowPlayingTitle;
-        const overflow = el.scrollWidth - el.clientWidth;
-        if (overflow > 0) {
-            el.style.setProperty('--scroll-dist', `-${overflow}px`);
-            el.classList.add('scrolling');
-        } else {
-            el.classList.remove('scrolling');
-        }
-    });
+    applyNowPlayingScroll();
 
     elements.audioController.title = `Now playing: ${title}`;
     elements.audioController.setAttribute('aria-label', `Now playing: ${title}`);
@@ -573,7 +604,7 @@ async function getTagsFast(track) {
         const response = await apiFetch(buildUrl('track', { path: track.path_lower }), {
             method: 'GET',
             headers: {
-                Range: 'bytes=0-65535',
+                Range: 'bytes=0-262143',
             },
         });
 
@@ -584,7 +615,10 @@ async function getTagsFast(track) {
             ...tags,
             trackNo: parseTrackNumber(tags.track),
         };
-    })();
+    })().catch((error) => {
+        tagCache.delete(key);
+        throw error;
+    });
 
     tagCache.set(key, pending);
     return pending;
@@ -1427,6 +1461,7 @@ async function initializeLibrary() {
     syncStickyOffsets();
     window.addEventListener('resize', syncStickyOffsets);
     window.addEventListener('orientationchange', syncStickyOffsets);
+    window.addEventListener('resize', applyNowPlayingScroll);
     requestAnimationFrame(syncStickyOffsets);
 
     initAccordion();

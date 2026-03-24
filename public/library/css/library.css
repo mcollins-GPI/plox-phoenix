@@ -627,7 +627,8 @@ thead .action-cell svg {
     overflow: visible;
 }
 
-#audio-controller {
+#audio-controller,
+#audio-preload {
     position: absolute;
     opacity: 0;
     pointer-events: none;
@@ -858,7 +859,7 @@ thead .action-cell svg {
     gap: 0.2rem;
     box-sizing: border-box;
     min-width: 0;
-    flex: 1 1 auto;
+    flex: 1 1 0%;
     overflow: hidden;
     padding: 0;
     border: none;
@@ -874,21 +875,38 @@ thead .action-cell svg {
         sans-serif;
 }
 
+.np-title,
+.np-sub {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
 .np-title {
     font-weight: 600;
     line-height: 1.2;
     color: #0f172a;
-    overflow: hidden;
-    text-overflow: ellipsis;
+}
+
+.np-sub {
+    opacity: 0.92;
+    font-size: 0.9rem;
+    color: var(--text-soft);
+}
+
+.np-scroll-inner {
+    display: inline-block;
     white-space: nowrap;
 }
 
-.np-title.scrolling {
-    overflow: visible;
-    text-overflow: unset;
-    display: inline-block;
-    width: max-content;
-    animation: marquee-scroll 6s linear infinite;
+.np-title.scrolling,
+.np-sub.scrolling {
+    text-overflow: clip;
+}
+
+.np-title.scrolling .np-scroll-inner,
+.np-sub.scrolling .np-scroll-inner {
+    animation: marquee-scroll var(--scroll-duration, 8s) linear infinite;
     animation-delay: 1.5s;
 }
 
@@ -905,15 +923,6 @@ thead .action-cell svg {
     100% {
         transform: translateX(0);
     }
-}
-
-.np-sub {
-    opacity: 0.92;
-    font-size: 0.9rem;
-    color: var(--text-soft);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .action-cell,
@@ -1170,6 +1179,11 @@ thead th {
         position: relative;
     }
 
+    /* Reserve space for the absolute-positioned chevron */
+    #control-container .now-playing {
+        margin-right: 36px;
+    }
+
     /* Chevron vertically centered on the right, not in flow */
     #control-container::after {
         position: absolute;
@@ -1191,6 +1205,11 @@ thead th {
     /* Hide skip/repeat/trash when collapsed */
     .section-panel:not(.section-expanded) #playlist-controls {
         display: none !important;
+    }
+
+    /* Prevent now-playing from wrapping when collapsed */
+    .section-panel:not(.section-expanded) #control-container {
+        flex-wrap: nowrap;
     }
 
     /* Hide artist column at narrowest widths */
