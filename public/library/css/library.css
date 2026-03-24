@@ -181,6 +181,13 @@ body {
     box-shadow: none;
 }
 
+.section-panel:not(.section-expanded) #artist-summary,
+#track-section:not(.section-expanded) .title-container,
+.section-panel:not(.section-expanded) #control-container {
+    border-bottom: none;
+    box-shadow: none;
+}
+
 .section-panel:not(.section-expanded) .artist-search-wrap,
 .section-panel:not(.section-expanded) .artist-navigation {
     display: none;
@@ -200,7 +207,6 @@ body {
     font-size: var(--section-header-font-size);
     padding: 0;
     gap: 0;
-    border-bottom: 1px solid var(--border);
     background: var(--section-header-surface);
     position: sticky;
     top: 0;
@@ -208,14 +214,15 @@ body {
     z-index: 2;
     cursor: pointer;
     user-select: none;
-    box-shadow:
-        inset 0 -1px 0 rgba(15, 23, 42, 0.12),
-        inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
 .section-expanded #collection-summary {
     gap: 6px;
     padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--border);
+    box-shadow:
+        inset 0 -1px 0 rgba(15, 23, 42, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
 #artist-count {
@@ -1069,10 +1076,6 @@ thead th {
         font-size: var(--section-header-font-size);
     }
 
-    #collection-summary {
-        padding: var(--section-header-padding-y) var(--section-header-padding-x);
-    }
-
     #artist-summary,
     #track-section .title-container {
         min-height: var(--section-header-min-height);
@@ -1269,6 +1272,10 @@ thead th {
     #collection-summary {
         gap: 6px;
         padding-bottom: 0.35rem;
+        border-bottom: 1px solid var(--border);
+        box-shadow:
+            inset 0 -1px 0 rgba(15, 23, 42, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.85);
     }
 
     /* Hide chevrons on browse columns */
