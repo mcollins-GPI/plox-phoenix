@@ -413,10 +413,26 @@ function initializeCustomAudioControls() {
         });
     }
 
-    elements.audioController.addEventListener('timeupdate', updateAudioControls);
-    elements.audioController.addEventListener('loadedmetadata', updateAudioControls);
-    elements.audioController.addEventListener('play', updateAudioControls);
-    elements.audioController.addEventListener('pause', updateAudioControls);
+    elements.audioController.addEventListener('timeupdate', () => {
+        updateAudioControls();
+        updateMediaSessionPositionState();
+    });
+    elements.audioController.addEventListener('loadedmetadata', () => {
+        updateAudioControls();
+        updateMediaSessionPositionState();
+    });
+    elements.audioController.addEventListener('play', () => {
+        updateAudioControls();
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.playbackState = 'playing';
+        }
+    });
+    elements.audioController.addEventListener('pause', () => {
+        updateAudioControls();
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.playbackState = 'paused';
+        }
+    });
     elements.audioController.addEventListener('emptied', updateAudioControls);
 
     updateAudioControls();
@@ -1141,6 +1157,11 @@ async function playIndex(index) {
     const item = state.playlist[index];
     updateNowPlaying(item);
 
+    // Register media session handlers and metadata immediately so lock screen
+    // controls (skip buttons) are available before tag hydration completes.
+    registerMediaSessionHandlers();
+    updateMediaSession(item.track, item.artist.name, item.album.name);
+
     try {
         const usePreloaded = state.preloadedIndex === index && elements.audioPreload.src && elements.audioPreload.readyState >= 2;
 
@@ -1254,11 +1275,33 @@ function updateMediaSession(track, artistName, albumName) {
         album,
     });
 
+    registerMediaSessionHandlers();
+}
+
+function registerMediaSessionHandlers() {
+    if (!('mediaSession' in navigator)) {
+        return;
+    }
+
     const handlers = {
         play: () => elements.audioController.play(),
         pause: () => elements.audioController.pause(),
         previoustrack: () => previousTrack(),
         nexttrack: () => nextTrack(),
+        seekto: (details) => {
+            if (details.seekTime != null && Number.isFinite(elements.audioController.duration)) {
+                elements.audioController.currentTime = details.seekTime;
+                updateMediaSessionPositionState();
+            }
+        },
+        seekbackward: (details) => {
+            elements.audioController.currentTime = Math.max(0, elements.audioController.currentTime - (details.seekOffset || 10));
+            updateMediaSessionPositionState();
+        },
+        seekforward: (details) => {
+            elements.audioController.currentTime = Math.min(elements.audioController.duration || 0, elements.audioController.currentTime + (details.seekOffset || 10));
+            updateMediaSessionPositionState();
+        },
     };
 
     Object.entries(handlers).forEach(([action, handler]) => {
@@ -1268,6 +1311,29 @@ function updateMediaSession(track, artistName, albumName) {
             // ignore unsupported actions
         }
     });
+}
+
+function updateMediaSessionPositionState() {
+    if (!('mediaSession' in navigator) || typeof navigator.mediaSession.setPositionState !== 'function') {
+        return;
+    }
+
+    const duration = elements.audioController.duration;
+    const currentTime = elements.audioController.currentTime;
+
+    if (!Number.isFinite(duration) || duration <= 0) {
+        return;
+    }
+
+    try {
+        navigator.mediaSession.setPositionState({
+            duration,
+            playbackRate: elements.audioController.playbackRate || 1,
+            position: Math.min(currentTime, duration),
+        });
+    } catch {
+        // ignore if position state is not supported
+    }
 }
 
 function nextTrack() {
