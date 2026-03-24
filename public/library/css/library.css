@@ -72,23 +72,92 @@ body {
 
 #media-picker {
     display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
+    flex-direction: column;
     width: 100%;
     height: auto;
     flex: 1 1 auto;
     min-height: 0;
     gap: 0;
+    overflow: hidden;
 }
 
 .section-panel {
     background: var(--panel);
-    box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
+    width: 100%;
+    min-height: 0;
+    border-bottom: none;
+    border-top: 1px solid var(--border);
+    overflow: hidden;
+    flex: 0 0 auto;
+    transition: flex 200ms ease;
+}
+
+.section-panel:first-child {
+    border-top: none;
+}
+
+.section-panel.section-expanded {
+    flex: 1 1 auto;
+    overflow-y: auto;
+}
+
+.section-panel:not(.section-expanded) #artist-list,
+.section-panel:not(.section-expanded) #album-list,
+.section-panel:not(.section-expanded) #track-list,
+.section-panel:not(.section-expanded) #playlist {
+    display: none;
+}
+
+.section-panel:not(.section-expanded) #playlist-controls {
+    display: flex;
+}
+
+.section-panel:not(.section-expanded) #playlist-controls .icon-control:nth-child(n + 3) {
+    display: none;
+}
+
+.section-panel:not(.section-expanded) #playlist-controls .icon-control {
+    width: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    height: 32px;
+}
+
+.section-panel:not(.section-expanded) #playlist-controls .icon-control span {
+    font-size: 1.1rem;
+}
+
+.section-panel:not(.section-expanded) #audio-player-shell {
+    display: none;
+}
+
+.mini-transport {
+    display: none !important;
+}
+
+.section-panel:not(.section-expanded) .mini-transport {
+    display: inline-flex !important;
+    flex-shrink: 0;
+}
+
+.section-panel:not(.section-expanded) .audio-seek,
+.section-panel:not(.section-expanded) .audio-time,
+.section-panel:not(.section-expanded) .audio-volume {
+    display: none;
+}
+
+.section-panel:not(.section-expanded) #artist-count {
+    border-bottom: none;
+    box-shadow: none;
+}
+
+.section-panel:not(.section-expanded) .artist-search-wrap,
+.section-panel:not(.section-expanded) .artist-navigation {
+    display: none;
 }
 
 #artist-section {
-    width: 25vw;
-    border-right: 1px solid var(--border);
+    border-right: 0;
     overflow: hidden;
     min-height: 0;
     display: flex;
@@ -100,17 +169,23 @@ body {
     flex-direction: column;
     font-size: var(--section-header-font-size);
     padding: 0;
-    gap: 6px;
-    padding-bottom: 0.35rem;
+    gap: 0;
     border-bottom: 1px solid var(--border);
     background: var(--section-header-surface);
     position: sticky;
     top: 0;
     flex: 0 0 auto;
     z-index: 2;
+    cursor: pointer;
+    user-select: none;
     box-shadow:
         inset 0 -1px 0 rgba(15, 23, 42, 0.12),
         inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.section-expanded #collection-summary {
+    gap: 6px;
+    padding-bottom: 0.35rem;
 }
 
 #artist-count {
@@ -249,8 +324,7 @@ body {
 }
 
 #album-section {
-    width: 25vw;
-    border-right: 1px solid var(--border);
+    border-right: 0;
     overflow: hidden;
     min-height: 0;
     display: flex;
@@ -270,6 +344,8 @@ body {
     top: 0;
     flex: 0 0 auto;
     z-index: 2;
+    cursor: pointer;
+    user-select: none;
     background: var(--section-header-surface);
     box-shadow:
         inset 0 -1px 0 rgba(15, 23, 42, 0.12),
@@ -315,6 +391,8 @@ body {
     top: 0;
     flex: 0 0 auto;
     z-index: 2;
+    cursor: pointer;
+    user-select: none;
     box-shadow:
         inset 0 -1px 0 rgba(15, 23, 42, 0.12),
         inset 0 1px 0 rgba(255, 255, 255, 0.85);
@@ -347,6 +425,44 @@ body {
 }
 #track-section .control:hover {
     background-color: var(--accent-soft-strong);
+}
+
+#collection-summary #artist-count::after,
+#artist-summary::after,
+#track-section .title-container::after,
+#control-container::after {
+    content: '';
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-left: auto;
+    flex-shrink: 0;
+    align-self: center;
+    font-size: 0;
+    background: rgba(15, 23, 42, 0.06);
+    border-radius: 50%;
+    transition:
+        transform 200ms ease,
+        background 180ms ease;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 18 15 12 9 6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+#collection-summary #artist-count::after:hover,
+#artist-summary::after:hover,
+#track-section .title-container::after:hover,
+#control-container::after:hover {
+    background-color: var(--accent-soft);
+}
+
+.section-expanded #collection-summary #artist-count::after,
+.section-expanded #artist-summary::after,
+.section-expanded .title-container::after,
+.section-expanded #control-container::after {
+    transform: rotate(90deg);
 }
 
 #track-list {
@@ -408,13 +524,16 @@ body {
 }
 
 #media-player {
-    border-top: 1px solid var(--border);
     height: auto;
-    flex: 0 0 42vh;
+    flex: 0 0 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
     background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+#media-player.section-expanded {
+    flex: 1 1 auto;
 }
 
 #control-container {
@@ -424,8 +543,14 @@ body {
     gap: 12px;
     align-items: center;
     border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+    cursor: pointer;
+    user-select: none;
+}
+
+.section-expanded #control-container {
+    overflow: visible;
 }
 
 #audio-controller {
@@ -463,8 +588,8 @@ body {
 }
 
 #audio-player-shell {
-    min-width: min(480px, 100%);
-    flex: 1 1 340px;
+    min-width: 0;
+    flex: 1 1 200px;
     height: var(--media-control-height);
     box-sizing: border-box;
     display: flex;
@@ -475,10 +600,12 @@ body {
     border: 1px solid var(--border);
     background: #f1f5f9;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
+    overflow: hidden;
 }
 
 .audio-btn {
     width: 32px;
+    min-width: 32px;
     height: 32px;
     border-radius: 50%;
     border: 1px solid rgba(15, 23, 42, 0.18);
@@ -490,24 +617,21 @@ body {
     font-weight: 700;
     line-height: 1;
     font-size: 1rem;
+    flex-shrink: 0;
 }
 
 .audio-seek {
     flex: 1;
+    min-width: 0;
     accent-color: var(--accent);
 }
 
 .audio-time {
-    min-width: 95px;
-    font-size: 0.84rem;
-    color: #334155;
-    text-align: right;
-    white-space: nowrap;
+    display: none;
 }
 
 .audio-volume {
-    width: 84px;
-    accent-color: var(--accent);
+    display: none;
 }
 
 #playlist-controls {
@@ -515,14 +639,15 @@ body {
     flex-direction: row;
     gap: 8px;
     margin: 0;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
+    flex-shrink: 0;
 }
 
 #playlist-controls .control {
     cursor: pointer;
-    height: var(--media-control-height);
-    min-height: var(--media-control-height);
+    height: 42px;
+    min-height: 42px;
     box-sizing: border-box;
     border-radius: 999px;
     display: flex;
@@ -538,9 +663,10 @@ body {
 }
 
 #playlist-controls .icon-control {
-    width: var(--media-control-height);
-    min-width: var(--media-control-height);
-    min-height: var(--media-control-height);
+    width: 42px;
+    min-width: 42px;
+    min-height: 42px;
+    height: 42px;
     padding: 0;
     border-radius: 50%;
 }
@@ -615,14 +741,15 @@ body {
     flex-direction: column;
     justify-content: center;
     gap: 0.2rem;
-    height: var(--media-control-height);
     box-sizing: border-box;
-    min-width: 200px;
-    padding: 0 0.8rem;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: #f1f5f9;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    padding: 0;
+    border: none;
+    background: none;
+    box-shadow: none;
+    height: auto;
     font-family:
         system-ui,
         -apple-system,
@@ -636,12 +763,42 @@ body {
     font-weight: 600;
     line-height: 1.2;
     color: #0f172a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.np-title.scrolling {
+    overflow: visible;
+    text-overflow: unset;
+    display: inline-block;
+    width: max-content;
+    animation: marquee-scroll 6s linear infinite;
+    animation-delay: 1.5s;
+}
+
+@keyframes marquee-scroll {
+    0%,
+    15% {
+        transform: translateX(0);
+    }
+    40%,
+    60% {
+        transform: translateX(var(--scroll-dist));
+    }
+    85%,
+    100% {
+        transform: translateX(0);
+    }
 }
 
 .np-sub {
     opacity: 0.92;
     font-size: 0.9rem;
     color: var(--text-soft);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .action-cell,
@@ -728,73 +885,7 @@ thead th {
 }
 
 @media (max-width: 991px) {
-    body {
-        overflow: hidden;
-    }
-
-    #media-picker {
-        flex-direction: column;
-        height: auto;
-        flex: 1 1 auto;
-        min-height: 0;
-    }
-
-    #artist-section,
-    #album-section,
-    #track-section {
-        width: 100%;
-        min-height: 0;
-        border-right: 0;
-        border-bottom: 1px solid var(--border);
-    }
-
-    #artist-section,
-    #album-section {
-        flex: 1 1 0;
-    }
-
-    #track-section {
-        flex: 1.2 1 0;
-    }
-
-    #collection-summary,
-    #artist-summary,
-    #track-section .title-container {
-        position: sticky;
-        top: var(--library-topbar-height);
-        z-index: 9;
-        background: var(--section-header-surface);
-    }
-
-    #media-player {
-        height: 38vh;
-        min-height: 0;
-    }
-
-    .section-panel {
-        box-shadow: none;
-    }
-
-    #control-container {
-        align-items: stretch;
-    }
-
-    #audio-controller,
-    #audio-player-shell,
-    .now-playing,
-    #playlist-controls {
-        width: 100%;
-    }
-
-    #control-container {
-        gap: 10px;
-    }
-
-    #playlist-controls .control {
-        flex: 1 1 140px;
-    }
-
-    #playlist-controls .icon-control {
+    .section-expanded #playlist-controls .control {
         flex: 0 0 auto;
     }
 }
@@ -854,28 +945,10 @@ thead th {
         padding: 0 8px;
     }
 
-    .audio-time {
-        min-width: 82px;
-        font-size: 0.8rem;
-    }
-
-    .audio-volume {
-        width: 72px;
-    }
-
     #playlist-controls .icon-control {
         width: var(--media-control-height-mobile);
         min-width: var(--media-control-height-mobile);
         min-height: var(--media-control-height-mobile);
         padding: 0;
-    }
-
-    .now-playing {
-        height: var(--media-control-height-mobile);
-        padding: 0 0.65rem;
-    }
-
-    .now-playing {
-        padding: 0.45rem 0.65rem;
     }
 }

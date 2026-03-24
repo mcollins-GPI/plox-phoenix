@@ -20,7 +20,9 @@ const elements = {
     playList: document.getElementById('playlist'),
     playlistControls: document.getElementById('playlist-controls'),
     audioController: document.getElementById('audio-controller'),
+    audioPreload: document.getElementById('audio-preload'),
     audioPlayToggle: document.getElementById('audio-play-toggle'),
+    miniPlayToggle: document.getElementById('mini-play-toggle'),
     audioSeek: document.getElementById('audio-seek'),
     audioTime: document.getElementById('audio-time'),
     audioVolume: document.getElementById('audio-volume'),
@@ -43,6 +45,7 @@ const state = {
     repeatMode: 'off',
     dragIndex: null,
     playlistTagHydrationInFlight: false,
+    preloadedIndex: -1,
 };
 
 const tagCache = new Map();
@@ -79,6 +82,17 @@ function buildUrl(path, params = {}) {
     });
 
     return url.toString();
+}
+
+function buildStreamUrl(trackPath) {
+    const token = getAuthToken();
+
+    if (!token) {
+        redirectToLogin();
+        throw new Error('Missing auth token');
+    }
+
+    return buildUrl('stream', { path: trackPath, token });
 }
 
 async function apiFetch(url, options = {}) {
@@ -244,6 +258,36 @@ function syncStickyOffsets() {
     document.documentElement.style.setProperty('--library-topbar-height', `${topbarHeight}px`);
 }
 
+function setExpandedSection(sectionId) {
+    const sections = document.querySelectorAll('#media-picker > .section-panel');
+    sections.forEach((section) => {
+        section.classList.toggle('section-expanded', section.id === sectionId);
+    });
+}
+
+function initAccordion() {
+    const headerMap = [
+        { header: document.getElementById('collection-summary'), section: 'artist-section' },
+        { header: document.getElementById('artist-summary'), section: 'album-section' },
+        { header: document.querySelector('#track-section .title-container'), section: 'track-section' },
+        { header: document.getElementById('control-container'), section: 'media-player' },
+    ];
+
+    headerMap.forEach(({ header, section }) => {
+        if (!header) return;
+        header.addEventListener('click', (e) => {
+            if (section === 'media-player' && e.target.closest('button, input, .audio-btn, .mini-transport')) return;
+            if (section === 'artist-section' && e.target.closest('.letter-link, .artist-navigation, input, button')) return;
+            const panel = document.getElementById(section);
+            if (panel) {
+                setExpandedSection(panel.classList.contains('section-expanded') ? null : section);
+            }
+        });
+    });
+
+    setExpandedSection('artist-section');
+}
+
 function setEmptyState(element, message) {
     clearElement(element);
     const empty = document.createElement('div');
@@ -286,6 +330,13 @@ function updateAudioControls() {
         elements.audioPlayToggle.setAttribute('aria-label', isPaused ? 'Play' : 'Pause');
         elements.audioPlayToggle.title = isPaused ? 'Play' : 'Pause';
     }
+
+    if (elements.miniPlayToggle) {
+        const isPaused = elements.audioController.paused;
+        elements.miniPlayToggle.textContent = isPaused ? '▶' : '❚❚';
+        elements.miniPlayToggle.setAttribute('aria-label', isPaused ? 'Play' : 'Pause');
+        elements.miniPlayToggle.title = isPaused ? 'Play' : 'Pause';
+    }
 }
 
 function initializeCustomAudioControls() {
@@ -299,6 +350,21 @@ function initializeCustomAudioControls() {
 
     if (elements.audioPlayToggle) {
         elements.audioPlayToggle.addEventListener('click', async () => {
+            if (elements.audioController.paused) {
+                try {
+                    await elements.audioController.play();
+                } catch {
+                    // autoplay restrictions may block play
+                }
+            } else {
+                elements.audioController.pause();
+            }
+            updateAudioControls();
+        });
+    }
+
+    if (elements.miniPlayToggle) {
+        elements.miniPlayToggle.addEventListener('click', async () => {
             if (elements.audioController.paused) {
                 try {
                     await elements.audioController.play();
@@ -401,6 +467,18 @@ function updateNowPlaying(item = null) {
 
     elements.nowPlayingTitle.textContent = title;
     elements.nowPlayingSub.textContent = [contextText, detailText].filter(Boolean).join(' • ') || artist || album || detailText || 'Tag details pending…';
+
+    requestAnimationFrame(() => {
+        const el = elements.nowPlayingTitle;
+        const overflow = el.scrollWidth - el.clientWidth;
+        if (overflow > 0) {
+            el.style.setProperty('--scroll-dist', `-${overflow}px`);
+            el.classList.add('scrolling');
+        } else {
+            el.classList.remove('scrolling');
+        }
+    });
+
     elements.audioController.title = `Now playing: ${title}`;
     elements.audioController.setAttribute('aria-label', `Now playing: ${title}`);
 }
@@ -999,12 +1077,10 @@ function enqueueTracks(artist, album, tracks, options = {}) {
 function clearPlaylist() {
     state.playlist = [];
     state.currentIndex = -1;
+    state.preloadedIndex = -1;
 
-    const previousUrl = elements.audioController.dataset.objectUrl;
-    if (previousUrl) {
-        URL.revokeObjectURL(previousUrl);
-        delete elements.audioController.dataset.objectUrl;
-    }
+    elements.audioPreload.removeAttribute('src');
+    elements.audioPreload.load();
 
     elements.audioController.pause();
     elements.audioController.removeAttribute('src');
@@ -1030,20 +1106,23 @@ async function playIndex(index) {
     updateNowPlaying(item);
 
     try {
-        const response = await apiFetch(buildUrl('track', { path: item.track.path_lower }), {
-            method: 'GET',
-        });
-        const blob = await response.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const previousUrl = elements.audioController.dataset.objectUrl;
+        const usePreloaded = state.preloadedIndex === index && elements.audioPreload.src && elements.audioPreload.readyState >= 2;
 
-        if (previousUrl) {
-            URL.revokeObjectURL(previousUrl);
+        if (usePreloaded) {
+            const previousUrl = elements.audioController.src;
+            elements.audioController.src = elements.audioPreload.src;
+            elements.audioController.currentTime = 0;
+            elements.audioPreload.removeAttribute('src');
+            elements.audioPreload.load();
+            state.preloadedIndex = -1;
+        } else {
+            const streamUrl = buildStreamUrl(item.track.path_lower);
+            elements.audioController.src = streamUrl;
+            elements.audioController.load();
+            state.preloadedIndex = -1;
+            elements.audioPreload.removeAttribute('src');
+            elements.audioPreload.load();
         }
-
-        elements.audioController.dataset.objectUrl = objectUrl;
-        elements.audioController.src = objectUrl;
-        elements.audioController.load();
 
         try {
             await elements.audioController.play();
@@ -1051,12 +1130,10 @@ async function playIndex(index) {
             // browser autoplay restrictions are acceptable here
         }
 
+        // Hydrate tags via small range request (non-blocking)
         try {
-            item.track._tags = await readTagsFromBlob(blob).then((tags) => ({
-                ...tags,
-                trackNo: parseTrackNumber(tags.track),
-            }));
-            tagCache.set(item.track.path_lower || item.track.name, Promise.resolve(item.track._tags));
+            const tags = await getTagsFast(item.track);
+            item.track._tags = tags;
             updateNowPlaying(item);
             renderTracks();
             renderPlaylist();
@@ -1067,6 +1144,39 @@ async function playIndex(index) {
         }
     } catch (error) {
         console.error(error);
+    }
+}
+
+function preloadNextTrack() {
+    let nextIndex = -1;
+
+    if (state.repeatMode === 'one') {
+        return;
+    }
+
+    if (state.currentIndex + 1 < state.playlist.length) {
+        nextIndex = state.currentIndex + 1;
+    } else if (state.repeatMode === 'all' && state.playlist.length > 0) {
+        nextIndex = 0;
+    }
+
+    if (nextIndex < 0 || nextIndex === state.preloadedIndex) {
+        return;
+    }
+
+    const nextItem = state.playlist[nextIndex];
+
+    if (!nextItem) {
+        return;
+    }
+
+    try {
+        const streamUrl = buildStreamUrl(nextItem.track.path_lower);
+        elements.audioPreload.src = streamUrl;
+        elements.audioPreload.load();
+        state.preloadedIndex = nextIndex;
+    } catch {
+        // preload is best-effort
     }
 }
 
@@ -1157,6 +1267,7 @@ async function loadAlbums(artist) {
     state.selectedAlbum = null;
     state.tracks = [];
     renderTracks();
+    setExpandedSection('album-section');
 
     const data = await apiGetJson('album', { artist: artist.name });
     state.albums = sortAlbums(data.album_list);
@@ -1166,6 +1277,7 @@ async function loadAlbums(artist) {
 async function loadTracks(artist, album) {
     state.selectedArtist = artist;
     state.selectedAlbum = album;
+    setExpandedSection('track-section');
 
     const data = await apiGetJson('tracks', { artist: artist.name, album: album.name });
     state.tracks = sortTracks(data.track_list);
@@ -1191,6 +1303,8 @@ async function initializeLibrary() {
     window.addEventListener('resize', syncStickyOffsets);
     window.addEventListener('orientationchange', syncStickyOffsets);
     requestAnimationFrame(syncStickyOffsets);
+
+    initAccordion();
 
     state.artistSearchQuery = '';
     if (elements.artistSearch) {
@@ -1230,6 +1344,14 @@ async function initializeLibrary() {
     elements.audioController.addEventListener('loadedmetadata', () => {
         if (state.currentIndex >= 0) {
             updateNowPlaying(state.playlist[state.currentIndex]);
+        }
+    });
+    elements.audioController.addEventListener('timeupdate', () => {
+        const duration = elements.audioController.duration;
+        const currentTime = elements.audioController.currentTime;
+
+        if (Number.isFinite(duration) && duration > 0 && duration - currentTime < 30) {
+            preloadNextTrack();
         }
     });
 

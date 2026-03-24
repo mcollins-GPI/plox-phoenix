@@ -2,8 +2,32 @@ require('dotenv').config();
 
 const crypto = require('crypto');
 const path = require('path');
+const { Readable } = require('stream');
 const fastify = require('fastify')({ logger: false });
 const { Dropbox } = require('dropbox');
+
+const AUDIO_MIME_TYPES = {
+    mp3: 'audio/mpeg',
+    flac: 'audio/flac',
+    ogg: 'audio/ogg',
+    oga: 'audio/ogg',
+    opus: 'audio/opus',
+    m4a: 'audio/mp4',
+    aac: 'audio/aac',
+    wav: 'audio/wav',
+    aiff: 'audio/aiff',
+    aif: 'audio/aiff',
+    wma: 'audio/x-ms-wma',
+    webm: 'audio/webm',
+};
+
+function getMimeType(filePath) {
+    const ext = String(filePath || '')
+        .split('.')
+        .pop()
+        .toLowerCase();
+    return AUDIO_MIME_TYPES[ext] || 'application/octet-stream';
+}
 
 const USER_PREFIX = 'user!';
 const PASSWORD_MIN_LENGTH = 8;
@@ -396,6 +420,33 @@ async function getFile(searchPath, rangeHeader) {
     };
 }
 
+async function getFileStream(searchPath, rangeHeader) {
+    const token = await dropbox.auth.getAccessToken();
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        'Dropbox-API-Arg': JSON.stringify({ path: searchPath }),
+    };
+
+    if (rangeHeader) {
+        headers.Range = rangeHeader;
+    }
+
+    const response = await httpFetch('https://content.dropboxapi.com/2/files/download', {
+        method: 'POST',
+        headers,
+    });
+
+    if (!response.ok && response.status !== 206) {
+        throw new Error(`Dropbox download failed: ${response.status}`);
+    }
+
+    return {
+        status: response.status,
+        headers: response.headers,
+        body: response.body,
+    };
+}
+
 async function getFileInfo(searchPath) {
     const response = await dropbox.filesGetMetadata({ path: searchPath });
     return response.result;
@@ -751,9 +802,57 @@ registerAliasedRoute('GET', '/track', { preHandler: requireAuth }, async (reques
             reply.code(206).header('Accept-Ranges', 'bytes').header('Content-Range', result.headers.get('content-range'));
         }
 
-        reply.header('Content-Type', 'audio/mpeg').send(result.buffer);
+        reply.header('Content-Type', getMimeType(trackPath)).send(result.buffer);
     } catch (error) {
         reply.code(500).send({ error: 'Failed to retrieve track.' });
+    }
+});
+
+registerAliasedRoute('GET', '/stream', async (request, reply) => {
+    const trackPath = request.query.path;
+    const token = request.query.token;
+
+    if (!trackPath || !token) {
+        reply.code(400).send({ error: 'Missing path or token parameter.' });
+        return;
+    }
+
+    try {
+        const decoded = fastify.jwt.verify(token);
+        const user = await getUser(decoded.user);
+
+        if (!user || !user.enabled) {
+            reply.code(401).send({ error: 'Authentication required.' });
+            return;
+        }
+    } catch (error) {
+        reply.code(401).send({ error: 'Authentication required.' });
+        return;
+    }
+
+    try {
+        const range = request.headers.range;
+        const result = await getFileStream(trackPath, range);
+        const contentType = getMimeType(trackPath);
+
+        reply.header('Content-Type', contentType);
+        reply.header('Accept-Ranges', 'bytes');
+
+        if (result.status === 206) {
+            const contentRange = result.headers.get('content-range');
+            const contentLength = result.headers.get('content-length');
+            reply.code(206);
+            if (contentRange) reply.header('Content-Range', contentRange);
+            if (contentLength) reply.header('Content-Length', contentLength);
+        } else {
+            const contentLength = result.headers.get('content-length');
+            if (contentLength) reply.header('Content-Length', contentLength);
+        }
+
+        const nodeStream = result.body instanceof Readable ? result.body : Readable.fromWeb(result.body);
+        return reply.send(nodeStream);
+    } catch (error) {
+        reply.code(500).send({ error: 'Failed to stream track.' });
     }
 });
 
