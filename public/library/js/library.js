@@ -78,6 +78,8 @@ const state = {
 // Blob URLs for next-track preloading and the currently active track.
 // Keeping these separate from `state` avoids serialisation surprises.
 let preloadBlobUrl = null;
+let preloadBlob = null; // actual Blob object (needed for .arrayBuffer() in MSE)
+let preloadedDuration = null; // duration of preloaded track from audioPreload.loadedmetadata
 let activeBlobUrl = null;
 
 // Screen Wake Lock — held while audio is playing so the screen stays on and
@@ -114,6 +116,199 @@ function releaseWakeLock() {
     }
     wakeLockSentinel = null;
 }
+
+// ---------------------------------------------------------------------------
+// MSE (MediaSource Extensions) engine for MP3 tracks.
+//
+// Why: Firefox for Android fires `abort` + `emptied` whenever `audio.src` is
+// reassigned — even without calling `.load()`. These events trigger a ~5-second
+// background-tab grace-period timer that pauses playback. The only way to avoid
+// this is to never change `audio.src` at a track boundary.
+//
+// How: we create one persistent MediaSource, attach it as the sole `audio.src`,
+// and append MP3 bytes from each successive track into the SourceBuffer. The
+// HTMLMediaElement sees a single seamless stream and never gets an `abort` event.
+//
+// Non-MP3 formats fall through to the existing blob/stream path.
+// ---------------------------------------------------------------------------
+const mse = {
+    active: false,
+    mediaSource: null,
+    sourceBuffer: null,
+    objectUrl: null,
+    // trackOffsets[i] = absolute MSE timeline start time (seconds) for playlist
+    // index i. Track i occupies [trackOffsets[i], trackOffsets[i] + trackDurations[i]).
+    trackOffsets: [],
+    trackDurations: [],
+    appendedUpTo: -1, // highest playlist index whose bytes are in the SourceBuffer
+    _appendQueue: Promise.resolve(),
+
+    isSupported() {
+        return typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('audio/mpeg');
+    },
+    canHandle(trackPath) {
+        return (
+            String(trackPath || '')
+                .split('.')
+                .pop()
+                .toLowerCase() === 'mp3'
+        );
+    },
+
+    // Time within the current track (subtracting the track's start offset).
+    currentTrackTime(audio) {
+        if (!this.active) {
+            return audio.currentTime;
+        }
+        const offset = this.trackOffsets[state.currentIndex] ?? 0;
+        return Math.max(0, audio.currentTime - offset);
+    },
+    // Duration of the current track only.
+    currentTrackDuration() {
+        if (!this.active) {
+            return elements.audioController.duration;
+        }
+        return this.trackDurations[state.currentIndex] ?? NaN;
+    },
+    // Seek within the current track.
+    seek(trackTime) {
+        const offset = this.trackOffsets[state.currentIndex] ?? 0;
+        elements.audioController.currentTime = offset + Math.max(0, trackTime);
+    },
+
+    // -----------------------------------------------------------------------
+    // init — called once for the very first MP3 track.
+    // Creates a fresh MediaSource, sets audio.src, and appends the first blob.
+    // -----------------------------------------------------------------------
+    async init(blob, duration, playlistIndex) {
+        this.teardown();
+
+        this.mediaSource = new MediaSource();
+        this.objectUrl = URL.createObjectURL(this.mediaSource);
+        elements.audioController.src = this.objectUrl;
+
+        await new Promise((resolve, reject) => {
+            const onOpen = () => {
+                this.mediaSource.removeEventListener('sourceopen', onOpen);
+                this.mediaSource.removeEventListener('error', onErr);
+                resolve();
+            };
+            const onErr = (e) => {
+                this.mediaSource.removeEventListener('sourceopen', onOpen);
+                this.mediaSource.removeEventListener('error', onErr);
+                reject(e);
+            };
+            this.mediaSource.addEventListener('sourceopen', onOpen, { once: true });
+            this.mediaSource.addEventListener('error', onErr, { once: true });
+        });
+
+        this.sourceBuffer = this.mediaSource.addSourceBuffer('audio/mpeg');
+        this.trackOffsets = [];
+        this.trackDurations = [];
+        this.appendedUpTo = -1;
+        this._appendQueue = Promise.resolve();
+        this.active = true;
+
+        await this._appendBuffer(await blob.arrayBuffer(), playlistIndex, 0);
+    },
+
+    // -----------------------------------------------------------------------
+    // appendNext — called at track-boundary time to seamlessly append the next
+    // track's bytes into the existing SourceBuffer.
+    // -----------------------------------------------------------------------
+    async appendNext(blob, duration, playlistIndex) {
+        // The next track starts right after the previous one ends on the
+        // timeline.  Use the known duration stored during preload.
+        const prevIndex = playlistIndex - 1;
+        const prevOffset = prevIndex >= 0 ? (this.trackOffsets[prevIndex] ?? 0) : 0;
+        const prevDuration = prevIndex >= 0 ? (this.trackDurations[prevIndex] ?? 0) : 0;
+        const startOffset = prevOffset + prevDuration;
+
+        await this._appendBuffer(await blob.arrayBuffer(), playlistIndex, startOffset);
+    },
+
+    // -----------------------------------------------------------------------
+    // _appendBuffer — low-level append with timestampOffset.
+    // Waits for the SourceBuffer to be ready, then appends.
+    // -----------------------------------------------------------------------
+    _appendBuffer(arrayBuffer, playlistIndex, timestampOffset) {
+        this._appendQueue = this._appendQueue.then(async () => {
+            if (!this.active || !this.sourceBuffer) {
+                return;
+            }
+            await this._waitReady();
+            this.sourceBuffer.timestampOffset = timestampOffset;
+            this.sourceBuffer.appendBuffer(arrayBuffer);
+            await this._waitReady();
+            // Record the offset we promised for this track.
+            this.trackOffsets[playlistIndex] = timestampOffset;
+            // Derive actual duration from what was buffered (most accurate).
+            const buffered = this.sourceBuffer.buffered;
+            let bufferedEnd = timestampOffset;
+            for (let i = 0; i < buffered.length; i++) {
+                if (buffered.end(i) > bufferedEnd) {
+                    bufferedEnd = buffered.end(i);
+                }
+            }
+            this.trackDurations[playlistIndex] = bufferedEnd - timestampOffset;
+            this.appendedUpTo = playlistIndex;
+            this._evict();
+        });
+        return this._appendQueue;
+    },
+
+    _waitReady() {
+        return new Promise((resolve) => {
+            if (!this.sourceBuffer || !this.sourceBuffer.updating) {
+                resolve();
+                return;
+            }
+            this.sourceBuffer.addEventListener('updateend', resolve, { once: true });
+        });
+    },
+
+    // Drop buffered data more than 30 s behind current playhead to stay within
+    // browser memory limits on mobile.
+    _evict() {
+        if (!this.sourceBuffer || this.sourceBuffer.updating) {
+            return;
+        }
+        const audio = elements.audioController;
+        const safeStart = Math.max(0, audio.currentTime - 30);
+        const buffered = this.sourceBuffer.buffered;
+        for (let i = 0; i < buffered.length; i++) {
+            const start = buffered.start(i);
+            if (start < safeStart) {
+                this.sourceBuffer.remove(start, Math.min(safeStart, buffered.end(i)));
+                return; // only one remove at a time
+            }
+        }
+    },
+
+    // Clean up everything and release the object URL.
+    teardown() {
+        this.active = false;
+        this._appendQueue = Promise.resolve();
+        try {
+            if (this.mediaSource) {
+                if (this.mediaSource.readyState === 'open') {
+                    this.mediaSource.endOfStream();
+                }
+            }
+        } catch {
+            /* ignore */
+        }
+        if (this.objectUrl) {
+            URL.revokeObjectURL(this.objectUrl);
+            this.objectUrl = null;
+        }
+        this.mediaSource = null;
+        this.sourceBuffer = null;
+        this.trackOffsets = [];
+        this.trackDurations = [];
+        this.appendedUpTo = -1;
+    },
+};
 
 const tagCache = new Map();
 
@@ -388,8 +583,8 @@ function formatPlaybackTime(seconds) {
 }
 
 function updateAudioControls() {
-    const currentTime = elements.audioController.currentTime;
-    const duration = elements.audioController.duration;
+    const currentTime = mse.active ? mse.currentTrackTime(elements.audioController) : elements.audioController.currentTime;
+    const duration = mse.active ? mse.currentTrackDuration() : elements.audioController.duration;
     const hasDuration = Number.isFinite(duration) && duration > 0;
 
     if (elements.audioSeek) {
@@ -460,13 +655,17 @@ function initializeCustomAudioControls() {
 
     if (elements.audioSeek) {
         elements.audioSeek.addEventListener('input', (event) => {
-            const duration = elements.audioController.duration;
+            const duration = mse.active ? mse.currentTrackDuration() : elements.audioController.duration;
             if (!Number.isFinite(duration) || duration <= 0) {
                 return;
             }
 
             const ratio = Number(event.target.value) / 100;
-            elements.audioController.currentTime = Math.max(0, Math.min(duration, duration * ratio));
+            if (mse.active) {
+                mse.seek(ratio * duration);
+            } else {
+                elements.audioController.currentTime = Math.max(0, Math.min(duration, duration * ratio));
+            }
             updateAudioControls();
         });
     }
@@ -1220,9 +1419,23 @@ function enqueueTracks(artist, album, tracks, options = {}) {
 }
 
 function clearPlaylist() {
+    mse.teardown();
+
     state.playlist = [];
     state.currentIndex = -1;
     state.preloadedIndex = -1;
+
+    if (preloadBlobUrl) {
+        URL.revokeObjectURL(preloadBlobUrl);
+        preloadBlobUrl = null;
+    }
+    preloadBlob = null;
+    preloadedDuration = null;
+
+    if (activeBlobUrl) {
+        URL.revokeObjectURL(activeBlobUrl);
+        activeBlobUrl = null;
+    }
 
     elements.audioPreload.removeAttribute('src');
     elements.audioPreload.load();
@@ -1248,11 +1461,15 @@ function fetchTrackAsBlob(trackPath) {
 
 // ---------------------------------------------------------------------------
 // Background track advance — used when moving to the next track while the
-// page is hidden (screen off). Unlike playIndex(), this path avoids calling
-// audio.load() so Firefox never resets its background-tab play permission
-// timer. We just swap src to the already-downloaded blob and rely on the
-// browser's ability to re-decode from the new URL without a full reload.
-// Falls back to playIndex() if no preloaded blob is ready.
+// page is hidden (screen off).
+//
+// MSE path (MP3): appends the preloaded blob's bytes directly into the
+// existing SourceBuffer. The HTMLMediaElement never changes its src, so
+// Firefox never fires abort/emptied and never starts a new background-tab
+// grace-period timer. This is the key fix for the 5-second pause.
+//
+// Non-MSE fallback (non-MP3 or preload missing): tries a src swap without
+// calling .load(). Falls back to playIndex() if that fails.
 // ---------------------------------------------------------------------------
 async function advanceToPreloaded(index) {
     if (index < 0 || index >= state.playlist.length) {
@@ -1265,12 +1482,85 @@ async function advanceToPreloaded(index) {
         return playIndex(index);
     }
 
+    const item = state.playlist[index];
+    const isMp3 = mse.canHandle(item.track.path_lower);
+
+    // -----------------------------------------------------------------------
+    // MSE path: append the preloaded blob's bytes seamlessly.
+    // -----------------------------------------------------------------------
+    if (mse.active && mse.isSupported() && isMp3 && preloadBlob) {
+        console.log(`advanceToPreloaded(${index}): MSE append path`);
+
+        const blobToAppend = preloadBlob;
+        const durationForAppend = preloadedDuration;
+        const prevBlobUrl = preloadBlobUrl;
+
+        // Consume the preload state.
+        preloadBlob = null;
+        preloadBlobUrl = null;
+        preloadedDuration = null;
+        state.preloadedIndex = -1;
+        elements.audioPreload.removeAttribute('src');
+        elements.audioPreload.load();
+
+        // Update UI immediately so the lock screen and now-playing reflect the
+        // new track before we await the append.
+        state.currentIndex = index;
+        renderPlaylist();
+        updateNowPlaying(item);
+        registerMediaSessionHandlers();
+        updateMediaSession(item.track, item.artist.name, item.album.name);
+
+        try {
+            await mse.appendNext(blobToAppend, durationForAppend, index);
+            console.log(`advanceToPreloaded(${index}): MSE append complete, offset=${mse.trackOffsets[index]?.toFixed(2)}, duration=${mse.trackDurations[index]?.toFixed(2)}`);
+        } catch (err) {
+            console.warn(`advanceToPreloaded(${index}): MSE append failed — ${err?.message ?? err}`);
+            // If the MSE append fails we have no clean recovery path — tear
+            // down MSE and hand off to playIndex which will start fresh.
+            mse.teardown();
+            preloadBlobUrl && URL.revokeObjectURL(preloadBlobUrl);
+            return playIndex(index);
+        }
+
+        // Revoke the blob URL now that the bytes are in the SourceBuffer.
+        URL.revokeObjectURL(prevBlobUrl);
+
+        // The audio element should continue playing autonomously — the
+        // SourceBuffer now has data beyond the current playhead so no
+        // interruption occurs. Only call play() if it somehow got paused.
+        if (elements.audioController.paused && !state.userPaused) {
+            try {
+                await elements.audioController.play();
+            } catch (err) {
+                console.warn(`advanceToPreloaded(${index}): play() after MSE append rejected — ${err?.message ?? err}`);
+            }
+        }
+
+        // Kick off the next preload immediately.
+        preloadNextTrack();
+
+        // Non-blocking tag hydration.
+        try {
+            const tags = await getTagsFast(item.track);
+            item.track._tags = tags;
+            updateNowPlaying(item);
+            renderTracks();
+            renderPlaylist();
+            updateMediaSession(item.track, item.artist.name, item.album.name);
+        } catch {
+            // tag read failures are non-fatal
+        }
+        return;
+    }
+
+    // -----------------------------------------------------------------------
+    // Non-MSE fallback: src swap without .load()
+    // -----------------------------------------------------------------------
     console.log(`advanceToPreloaded(${index}): swapping src without load()`);
 
     state.currentIndex = index;
     renderPlaylist();
-
-    const item = state.playlist[index];
     updateNowPlaying(item);
     registerMediaSessionHandlers();
     updateMediaSession(item.track, item.artist.name, item.album.name);
@@ -1281,6 +1571,8 @@ async function advanceToPreloaded(index) {
     }
     activeBlobUrl = preloadBlobUrl;
     preloadBlobUrl = null;
+    preloadBlob = null;
+    preloadedDuration = null;
     state.preloadedIndex = -1;
 
     // Assign src WITHOUT calling .load() — this is the key difference.
@@ -1330,6 +1622,91 @@ async function playIndex(index) {
     updateMediaSession(item.track, item.artist.name, item.album.name);
 
     try {
+        // ------------------------------------------------------------------
+        // MSE path — for MP3 tracks, initialise a persistent MediaSource so
+        // that we never have to change audio.src at track boundaries.
+        // (playIndex is only called for the FIRST track or when the user
+        //  explicitly jumps to a different track. Subsequent auto-advances go
+        //  through advanceToPreloaded which appends into the existing buffer.)
+        // ------------------------------------------------------------------
+        if (mse.isSupported() && mse.canHandle(item.track.path_lower)) {
+            // Tear down any previous MSE session.
+            mse.teardown();
+            // Also revoke any plain blob URL for the previous track.
+            if (activeBlobUrl) {
+                URL.revokeObjectURL(activeBlobUrl);
+                activeBlobUrl = null;
+            }
+
+            // Use the already-preloaded blob if it matches this index; otherwise
+            // fetch a fresh blob now.
+            let blob;
+            let startDuration;
+
+            if (state.preloadedIndex === index && preloadBlob) {
+                blob = preloadBlob;
+                startDuration = preloadedDuration;
+                // Consume the preloaded blob.
+                preloadBlob = null;
+                preloadBlobUrl && URL.revokeObjectURL(preloadBlobUrl);
+                preloadBlobUrl = null;
+                preloadedDuration = null;
+                state.preloadedIndex = -1;
+                elements.audioPreload.removeAttribute('src');
+                elements.audioPreload.load();
+            } else {
+                // Discard any stale preload blob.
+                if (preloadBlobUrl) {
+                    URL.revokeObjectURL(preloadBlobUrl);
+                    preloadBlobUrl = null;
+                }
+                preloadBlob = null;
+                preloadedDuration = null;
+                state.preloadedIndex = -1;
+                elements.audioPreload.removeAttribute('src');
+                elements.audioPreload.load();
+
+                const url = buildUrl('track', { path: item.track.path_lower });
+                const response = await apiFetch(url);
+                blob = await response.blob();
+                startDuration = null; // will be derived from buffered range
+            }
+
+            console.log(`playIndex(${index}): initialising MSE for ${item.track.path_lower}`);
+            await mse.init(blob, startDuration, index);
+
+            try {
+                await elements.audioController.play();
+            } catch (err) {
+                console.warn(`playIndex(${index}): MSE play() rejected — ${err?.message ?? err}`);
+            }
+
+            preloadNextTrack();
+
+            // Hydrate tags (non-blocking).
+            try {
+                const tags = await getTagsFast(item.track);
+                item.track._tags = tags;
+                updateNowPlaying(item);
+                renderTracks();
+                renderPlaylist();
+                updateMediaSession(item.track, item.artist.name, item.album.name);
+            } catch (error) {
+                console.warn('Tag read failed:', error);
+                updateMediaSession(item.track, item.artist.name, item.album.name);
+            }
+            return;
+        }
+
+        // ------------------------------------------------------------------
+        // Non-MSE path (FLAC, OGG, M4A, etc.) — same as before.
+        // ------------------------------------------------------------------
+
+        // Tear down any active MSE session when switching away from MP3.
+        if (mse.active) {
+            mse.teardown();
+        }
+
         // Revoke the blob URL of the track we are replacing (if any).
         if (activeBlobUrl) {
             URL.revokeObjectURL(activeBlobUrl);
@@ -1341,6 +1718,8 @@ async function playIndex(index) {
         if (usePreloaded) {
             activeBlobUrl = preloadBlobUrl;
             preloadBlobUrl = null;
+            preloadBlob = null;
+            preloadedDuration = null;
             state.preloadedIndex = -1;
             elements.audioPreload.removeAttribute('src');
             elements.audioPreload.load();
@@ -1357,6 +1736,8 @@ async function playIndex(index) {
                 URL.revokeObjectURL(preloadBlobUrl);
                 preloadBlobUrl = null;
             }
+            preloadBlob = null;
+            preloadedDuration = null;
             state.preloadedIndex = -1;
             elements.audioPreload.removeAttribute('src');
             elements.audioPreload.load();
@@ -1441,6 +1822,8 @@ async function preloadNextTrack() {
             URL.revokeObjectURL(preloadBlobUrl);
             preloadBlobUrl = null;
         }
+        preloadBlob = null;
+        preloadedDuration = null;
         state.preloadedIndex = -1;
         elements.audioPreload.removeAttribute('src');
         elements.audioPreload.load();
@@ -1450,7 +1833,11 @@ async function preloadNextTrack() {
         // Firefox for Android throttles stream fetches in background tabs,
         // causing 60+ second delays if we use a stream URL at transition time.
         console.log(`Preloading track ${nextIndex} as blob…`);
-        const blobUrl = await fetchTrackAsBlob(nextItem.track.path_lower);
+        const url = buildUrl('track', { path: nextItem.track.path_lower });
+        const response = await apiFetch(url);
+        const blob = await response.blob();
+        preloadBlob = blob;
+        const blobUrl = URL.createObjectURL(blob);
         preloadBlobUrl = blobUrl;
         elements.audioPreload.src = blobUrl;
         elements.audioPreload.load();
@@ -1505,17 +1892,32 @@ function registerMediaSessionHandlers() {
         previoustrack: () => previousTrack(),
         nexttrack: () => nextTrack(),
         seekto: (details) => {
-            if (details.seekTime != null && Number.isFinite(elements.audioController.duration)) {
-                elements.audioController.currentTime = details.seekTime;
+            if (details.seekTime != null) {
+                if (mse.active) {
+                    mse.seek(details.seekTime);
+                } else if (Number.isFinite(elements.audioController.duration)) {
+                    elements.audioController.currentTime = details.seekTime;
+                }
                 updateMediaSessionPositionState();
             }
         },
         seekbackward: (details) => {
-            elements.audioController.currentTime = Math.max(0, elements.audioController.currentTime - (details.seekOffset || 10));
+            const cur = mse.active ? mse.currentTrackTime(elements.audioController) : elements.audioController.currentTime;
+            if (mse.active) {
+                mse.seek(Math.max(0, cur - (details.seekOffset || 10)));
+            } else {
+                elements.audioController.currentTime = Math.max(0, elements.audioController.currentTime - (details.seekOffset || 10));
+            }
             updateMediaSessionPositionState();
         },
         seekforward: (details) => {
-            elements.audioController.currentTime = Math.min(elements.audioController.duration || 0, elements.audioController.currentTime + (details.seekOffset || 10));
+            const dur = mse.active ? mse.currentTrackDuration() : elements.audioController.duration || 0;
+            const cur = mse.active ? mse.currentTrackTime(elements.audioController) : elements.audioController.currentTime;
+            if (mse.active) {
+                mse.seek(Math.min(dur, cur + (details.seekOffset || 10)));
+            } else {
+                elements.audioController.currentTime = Math.min(dur, elements.audioController.currentTime + (details.seekOffset || 10));
+            }
             updateMediaSessionPositionState();
         },
     };
@@ -1534,8 +1936,8 @@ function updateMediaSessionPositionState() {
         return;
     }
 
-    const duration = elements.audioController.duration;
-    const currentTime = elements.audioController.currentTime;
+    const duration = mse.active ? mse.currentTrackDuration() : elements.audioController.duration;
+    const currentTime = mse.active ? mse.currentTrackTime(elements.audioController) : elements.audioController.currentTime;
 
     if (!Number.isFinite(duration) || duration <= 0) {
         return;
@@ -1557,22 +1959,21 @@ function nextTrack() {
         return;
     }
 
-    // When the page is hidden (screen off) use the no-load advance path so
-    // Firefox doesn't reset its background-play grace period timer.
-    const advance = document.hidden ? advanceToPreloaded : playIndex;
-
+    // Always go through advanceToPreloaded so the MSE path (or no-load blob
+    // swap) is used regardless of whether the page is visible. advanceToPreloaded
+    // falls back to playIndex() when no preloaded blob is available.
     if (state.repeatMode === 'one') {
-        advance(state.currentIndex);
+        advanceToPreloaded(state.currentIndex);
         return;
     }
 
     if (state.currentIndex + 1 < state.playlist.length) {
-        advance(state.currentIndex + 1);
+        advanceToPreloaded(state.currentIndex + 1);
         return;
     }
 
     if (state.repeatMode === 'all') {
-        advance(0);
+        advanceToPreloaded(0);
     }
 }
 
@@ -1722,14 +2123,42 @@ async function initializeLibrary() {
             updateNowPlaying(state.playlist[state.currentIndex]);
         }
     });
+
+    // Capture the preloaded track's duration as soon as the browser parses its
+    // headers. This is needed by the MSE engine to set the correct
+    // timestampOffset when appending the next track's bytes seamlessly.
+    elements.audioPreload.addEventListener('loadedmetadata', () => {
+        preloadedDuration = elements.audioPreload.duration || null;
+        console.log(`audioPreload loadedmetadata: duration=${preloadedDuration}`);
+    });
+
     elements.audioController.addEventListener('timeupdate', () => {
-        const duration = elements.audioController.duration;
-        const currentTime = elements.audioController.currentTime;
+        const rawTime = elements.audioController.currentTime;
+        const rawDuration = elements.audioController.duration;
 
         // Fallback: trigger preload if not already in progress (e.g. if the
         // immediate preload after play() was skipped due to an error).
-        if (Number.isFinite(duration) && duration > 0 && duration - currentTime < 60 && state.preloadedIndex < 0) {
+        if (Number.isFinite(rawDuration) && rawDuration > 0 && rawDuration - rawTime < 60 && state.preloadedIndex < 0) {
             preloadNextTrack();
+        }
+
+        // MSE track-boundary detection.
+        // When MSE is active the <audio> element plays a single long timeline.
+        // There is no native 'ended' event at individual track boundaries, so
+        // we watch currentTime.  When the playhead passes the start of the
+        // NEXT track's data in the SourceBuffer we know the current track has
+        // finished and should advance.
+        if (mse.active) {
+            const nextIdx = state.currentIndex + 1;
+            if (nextIdx < state.playlist.length) {
+                const nextOffset = mse.trackOffsets[nextIdx];
+                if (nextOffset !== undefined && rawTime >= nextOffset && mse.appendedUpTo >= nextIdx) {
+                    // The playhead has entered the next track's region.  Advance.
+                    // nextTrack() → advanceToPreloaded(nextIdx) will update
+                    // state.currentIndex, so this branch won't re-fire.
+                    nextTrack();
+                }
+            }
         }
     });
 
