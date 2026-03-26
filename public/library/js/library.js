@@ -1928,6 +1928,26 @@ async function preloadNextTrack() {
         elements.audioPreload.load();
         state.preloadedIndex = nextIndex;
         console.log(`Preloaded track ${nextIndex} (blob ready)`);
+
+        // Warm the server-side transcode cache for the track AFTER next so
+        // that when it becomes the preload target, the server responds from
+        // disk cache instead of re-transcoding.  Fire-and-forget.
+        if (useMse) {
+            let warmIndex = -1;
+            if (nextIndex + 1 < state.playlist.length) {
+                warmIndex = nextIndex + 1;
+            } else if (state.repeatMode === 'all' && state.playlist.length > 0) {
+                warmIndex = 0;
+            }
+            if (warmIndex >= 0 && warmIndex !== state.currentIndex) {
+                const warmItem = state.playlist[warmIndex];
+                if (warmItem) {
+                    const warmUrl = buildUrl('track/transcode', { path: warmItem.track.path_lower });
+                    apiFetch(warmUrl).catch(() => {}); // best-effort, ignore errors
+                    console.log(`Cache-warming track ${warmIndex}`);
+                }
+            }
+        }
     } catch (err) {
         console.warn('Preload failed:', err?.message ?? err);
         // preload is best-effort

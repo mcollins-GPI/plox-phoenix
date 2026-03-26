@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
 const fastify = require('fastify')({ logger: false });
@@ -62,6 +63,36 @@ try {
     ffmpegAvailable = true;
 } catch {
     console.warn('ffmpeg not found — transcoding endpoint will be disabled.');
+}
+
+// Disk cache for transcoded fMP4 files — avoids re-transcoding the same track.
+const TRANSCODE_CACHE_DIR = path.join(__dirname, '.transcode-cache');
+try {
+    fs.mkdirSync(TRANSCODE_CACHE_DIR, { recursive: true });
+} catch {
+    console.warn('Could not create transcode cache directory.');
+}
+
+function transcodeCacheKey(trackPath) {
+    return crypto.createHash('sha256').update(trackPath.toLowerCase()).digest('hex') + '.mp4';
+}
+
+function getCachedTranscode(trackPath) {
+    const file = path.join(TRANSCODE_CACHE_DIR, transcodeCacheKey(trackPath));
+    try {
+        return fs.readFileSync(file);
+    } catch {
+        return null;
+    }
+}
+
+function setCachedTranscode(trackPath, buffer) {
+    const file = path.join(TRANSCODE_CACHE_DIR, transcodeCacheKey(trackPath));
+    try {
+        fs.writeFileSync(file, buffer);
+    } catch (err) {
+        console.warn('Cache write failed:', err?.message ?? err);
+    }
 }
 
 fastify.register(require('@fastify/cors'));
@@ -876,6 +907,13 @@ registerAliasedRoute('GET', '/track/transcode', { preHandler: requireAuth }, asy
     }
 
     try {
+        // Check the disk cache first.
+        const cached = getCachedTranscode(trackPath);
+        if (cached) {
+            reply.header('Content-Type', 'audio/mp4').header('Content-Length', cached.length).send(cached);
+            return;
+        }
+
         // Download the original file from Dropbox as a stream.
         const dbxResult = await getFileStream(trackPath);
 
@@ -937,6 +975,9 @@ registerAliasedRoute('GET', '/track/transcode', { preHandler: requireAuth }, asy
         });
 
         const outputBuffer = Buffer.concat(outputChunks);
+
+        // Cache the transcoded result for future requests.
+        setCachedTranscode(trackPath, outputBuffer);
 
         reply.header('Content-Type', 'audio/mp4').header('Content-Length', outputBuffer.length).send(outputBuffer);
     } catch (error) {
