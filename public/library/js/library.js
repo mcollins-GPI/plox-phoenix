@@ -1378,7 +1378,14 @@ function registerMediaSessionHandlers() {
             return elements.audioController.play();
         },
         pause: () => {
-            state.userPaused = true;
+            // Only treat this as a deliberate user pause when the page is
+            // visible. Firefox for Android fires the MediaSession pause action
+            // as part of its own background-tab throttling (screen off), which
+            // is NOT a user gesture. If we set userPaused=true in that case,
+            // the visibilitychange auto-resume is incorrectly suppressed.
+            if (!document.hidden) {
+                state.userPaused = true;
+            }
             elements.audioController.pause();
         },
         previoustrack: () => previousTrack(),
