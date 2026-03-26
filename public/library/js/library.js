@@ -1246,6 +1246,73 @@ function fetchTrackAsBlob(trackPath) {
         .then((blob) => URL.createObjectURL(blob));
 }
 
+// ---------------------------------------------------------------------------
+// Background track advance — used when moving to the next track while the
+// page is hidden (screen off). Unlike playIndex(), this path avoids calling
+// audio.load() so Firefox never resets its background-tab play permission
+// timer. We just swap src to the already-downloaded blob and rely on the
+// browser's ability to re-decode from the new URL without a full reload.
+// Falls back to playIndex() if no preloaded blob is ready.
+// ---------------------------------------------------------------------------
+async function advanceToPreloaded(index) {
+    if (index < 0 || index >= state.playlist.length) {
+        return;
+    }
+
+    if (state.preloadedIndex !== index || !preloadBlobUrl) {
+        // No preloaded blob — fall back to normal playIndex().
+        console.log(`advanceToPreloaded(${index}): no blob, falling back to playIndex`);
+        return playIndex(index);
+    }
+
+    console.log(`advanceToPreloaded(${index}): swapping src without load()`);
+
+    state.currentIndex = index;
+    renderPlaylist();
+
+    const item = state.playlist[index];
+    updateNowPlaying(item);
+    registerMediaSessionHandlers();
+    updateMediaSession(item.track, item.artist.name, item.album.name);
+
+    // Swap to the preloaded blob.
+    if (activeBlobUrl) {
+        URL.revokeObjectURL(activeBlobUrl);
+    }
+    activeBlobUrl = preloadBlobUrl;
+    preloadBlobUrl = null;
+    state.preloadedIndex = -1;
+
+    // Assign src WITHOUT calling .load() — this is the key difference.
+    // Firefox treats this as a continuation of the same media session rather
+    // than a brand-new one, so no background-play grace period is triggered.
+    elements.audioController.src = activeBlobUrl;
+    elements.audioController.currentTime = 0;
+
+    try {
+        await elements.audioController.play();
+        console.log(`advanceToPreloaded(${index}): play() succeeded`);
+    } catch (err) {
+        console.warn(`advanceToPreloaded(${index}): play() rejected — ${err?.message ?? err}, falling back to playIndex`);
+        return playIndex(index);
+    }
+
+    // Kick off the next preload immediately.
+    preloadNextTrack();
+
+    // Non-blocking tag hydration.
+    try {
+        const tags = await getTagsFast(item.track);
+        item.track._tags = tags;
+        updateNowPlaying(item);
+        renderTracks();
+        renderPlaylist();
+        updateMediaSession(item.track, item.artist.name, item.album.name);
+    } catch {
+        // tag read failures are non-fatal
+    }
+}
+
 async function playIndex(index) {
     if (index < 0 || index >= state.playlist.length) {
         return;
@@ -1274,11 +1341,16 @@ async function playIndex(index) {
         if (usePreloaded) {
             activeBlobUrl = preloadBlobUrl;
             preloadBlobUrl = null;
-            elements.audioController.src = activeBlobUrl;
-            elements.audioController.currentTime = 0;
+            state.preloadedIndex = -1;
             elements.audioPreload.removeAttribute('src');
             elements.audioPreload.load();
-            state.preloadedIndex = -1;
+            // Assign the new src and seek to start, then let play() below
+            // handle playback. We call .load() here because this is a
+            // user-initiated jump (page is visible), so the grace-period
+            // reset doesn't matter.
+            elements.audioController.src = activeBlobUrl;
+            elements.audioController.load();
+            elements.audioController.currentTime = 0;
         } else {
             // Discard any stale preload blob.
             if (preloadBlobUrl) {
@@ -1485,18 +1557,22 @@ function nextTrack() {
         return;
     }
 
+    // When the page is hidden (screen off) use the no-load advance path so
+    // Firefox doesn't reset its background-play grace period timer.
+    const advance = document.hidden ? advanceToPreloaded : playIndex;
+
     if (state.repeatMode === 'one') {
-        playIndex(state.currentIndex);
+        advance(state.currentIndex);
         return;
     }
 
     if (state.currentIndex + 1 < state.playlist.length) {
-        playIndex(state.currentIndex + 1);
+        advance(state.currentIndex + 1);
         return;
     }
 
     if (state.repeatMode === 'all') {
-        playIndex(0);
+        advance(0);
     }
 }
 
