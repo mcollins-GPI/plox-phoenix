@@ -7,6 +7,18 @@ const imageFileTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 const fileTypesToExclude = [...nonMusicFileTypes, ...imageFileTypes];
 const repeatModes = ['off', 'all', 'one'];
 
+// Default artwork shown in the OS media notification when no album art is
+// available. Firefox for Android requires artwork to display the full lock
+// screen player with skip controls.
+const DEFAULT_ARTWORK_URI =
+    'data:image/svg+xml,' +
+    encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">' +
+            '<rect width="128" height="128" rx="16" fill="#1a1a2e"/>' +
+            '<text x="64" y="90" text-anchor="middle" font-size="80" fill="#ffffff">♪</text>' +
+            '</svg>',
+    );
+
 const ICONS = {
     play: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.5 3.5v17l13-8.5z"/></svg>',
     pause: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="3" width="4.5" height="18" rx="1.2"/><rect x="14.5" y="3" width="4.5" height="18" rx="1.2"/></svg>',
@@ -423,6 +435,7 @@ function initializeCustomAudioControls() {
     });
     elements.audioController.addEventListener('play', () => {
         updateAudioControls();
+        updateMediaSessionPositionState();
         if ('mediaSession' in navigator) {
             navigator.mediaSession.playbackState = 'playing';
         }
@@ -1213,35 +1226,30 @@ async function playIndex(index) {
             state.preloadedIndex = -1;
             elements.audioPreload.removeAttribute('src');
             elements.audioPreload.load();
-
-            // If the stream fails to load, fall back to buffered fetch
-            await new Promise((resolve, reject) => {
-                const onCanPlay = () => {
-                    cleanup();
-                    resolve();
-                };
-                const onError = () => {
-                    cleanup();
-                    reject(new Error('stream failed'));
-                };
-                const cleanup = () => {
-                    elements.audioController.removeEventListener('canplay', onCanPlay);
-                    elements.audioController.removeEventListener('error', onError);
-                };
-                elements.audioController.addEventListener('canplay', onCanPlay, { once: true });
-                elements.audioController.addEventListener('error', onError, { once: true });
-            }).catch(async () => {
-                console.warn('Stream failed, falling back to buffered fetch:', item.track.path_lower);
-                const blobUrl = await fetchTrackAsBlob(item.track.path_lower);
-                elements.audioController.src = blobUrl;
-                elements.audioController.load();
-            });
         }
 
+        // Call play() directly without waiting for canplay first. Awaiting
+        // canplay before play() prevents background playback on Firefox for
+        // Android when the screen is off: the browser throttles the page and
+        // the canplay event may never fire, leaving the queue permanently
+        // stalled. The browser handles buffering internally once play() is
+        // invoked. If play() rejects due to a media error (not just an
+        // autoplay restriction), fall back to a buffered blob fetch.
         try {
             await elements.audioController.play();
         } catch {
-            // browser autoplay restrictions are acceptable here
+            if (elements.audioController.error) {
+                try {
+                    console.warn('Stream failed, falling back to buffered fetch:', item.track.path_lower);
+                    const blobUrl = await fetchTrackAsBlob(item.track.path_lower);
+                    elements.audioController.src = blobUrl;
+                    elements.audioController.load();
+                    await elements.audioController.play();
+                } catch {
+                    // blob fallback also failed
+                }
+            }
+            // autoplay restrictions are acceptable
         }
 
         // Hydrate tags via small range request (non-blocking)
@@ -1307,6 +1315,7 @@ function updateMediaSession(track, artistName, albumName) {
         title,
         artist,
         album,
+        artwork: [{ src: DEFAULT_ARTWORK_URI, sizes: '128x128', type: 'image/svg+xml' }],
     });
 
     registerMediaSessionHandlers();

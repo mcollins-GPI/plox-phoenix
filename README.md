@@ -13,6 +13,8 @@
 - media section
     - none
 - general
+    - shuffle playing tracks
+    - save playlists
     - add google cast support
     - store parsed media information so that it doesn't have to read tags every time
     - see what other people are streaming (social features)
