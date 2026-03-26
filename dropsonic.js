@@ -54,6 +54,16 @@ if (!envAuthSecret && isProduction) {
 const authSecret = envAuthSecret || crypto.randomBytes(32).toString('hex');
 const cachedInformation = { artist_list: [] };
 
+// Check if ffmpeg is present on the system (non-fatal — transcoding is
+// disabled gracefully when ffmpeg is missing).
+let ffmpegAvailable = false;
+try {
+    require('child_process').execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
+    ffmpegAvailable = true;
+} catch {
+    console.warn('ffmpeg not found — transcoding endpoint will be disabled.');
+}
+
 fastify.register(require('@fastify/cors'));
 fastify.register(require('@fastify/jwt'), { secret: authSecret });
 fastify.register(require('@fastify/leveldb'), { name: 'authdb' });
@@ -840,6 +850,96 @@ registerAliasedRoute('GET', '/track', { preHandler: requireAuth }, async (reques
         reply.header('Content-Type', getMimeType(trackPath)).send(result.buffer);
     } catch (error) {
         reply.code(500).send({ error: 'Failed to retrieve track.' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Transcode endpoint — converts any audio format to fragmented MP4 / Opus
+// so the browser can use MediaSource Extensions for seamless background
+// playback on Firefox for Android.
+//
+// Returns a self-contained fMP4 blob (ftyp + moov + moof/mdat fragments).
+// The client appends this into a persistent SourceBuffer.
+// ---------------------------------------------------------------------------
+registerAliasedRoute('GET', '/track/transcode', { preHandler: requireAuth }, async (request, reply) => {
+    const trackPath = request.query.path || request.headers.path;
+
+    if (!trackPath) {
+        reply.code(400).send({ error: 'Missing path parameter.' });
+        return;
+    }
+
+    // Ensure ffmpeg is available.
+    if (!ffmpegAvailable) {
+        reply.code(501).send({ error: 'Transcoding not available — ffmpeg not found on server.' });
+        return;
+    }
+
+    try {
+        // Download the original file from Dropbox as a stream.
+        const dbxResult = await getFileStream(trackPath);
+
+        // Spawn ffmpeg: read audio from stdin, transcode to Opus in fMP4 container.
+        // -movflags frag_keyframe+empty_moov+default_base_moof produces a proper
+        // fragmented MP4 that the browser can ingest via MSE without seeking.
+        const { spawn } = require('child_process');
+        const ffmpeg = spawn('ffmpeg', [
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-i',
+            'pipe:0', // read from stdin
+            '-vn', // drop any embedded art/video
+            '-c:a',
+            'libopus', // Opus codec
+            '-b:a',
+            '128k', // 128 kbps
+            '-ar',
+            '48000', // 48 kHz (Opus default/preferred)
+            '-ac',
+            '2', // stereo
+            '-f',
+            'mp4', // MP4 container
+            '-movflags',
+            'frag_keyframe+empty_moov+default_base_moof',
+            'pipe:1', // write to stdout
+        ]);
+
+        // Pipe the Dropbox download stream into ffmpeg stdin.
+        Readable.from(dbxResult.body)
+            .pipe(ffmpeg.stdin)
+            .on('error', () => {
+                // Ignore EPIPE — ffmpeg may close stdin early on errors.
+            });
+
+        // Collect stderr for diagnostics (but don't expose to the client).
+        let stderrChunks = [];
+        ffmpeg.stderr.on('data', (chunk) => stderrChunks.push(chunk));
+
+        // Wait for ffmpeg to finish and collect the full output.  We buffer
+        // the entire result so the client gets a Content-Length and can create
+        // a single Blob (needed for MSE preloading).
+        const outputChunks = [];
+        ffmpeg.stdout.on('data', (chunk) => outputChunks.push(chunk));
+
+        await new Promise((resolve, reject) => {
+            ffmpeg.on('close', (code) => {
+                if (code === 0) {
+                    resolve();
+                } else {
+                    const stderr = Buffer.concat(stderrChunks).toString().slice(0, 500);
+                    reject(new Error(`ffmpeg exited with code ${code}: ${stderr}`));
+                }
+            });
+            ffmpeg.on('error', reject);
+        });
+
+        const outputBuffer = Buffer.concat(outputChunks);
+
+        reply.header('Content-Type', 'audio/mp4').header('Content-Length', outputBuffer.length).send(outputBuffer);
+    } catch (error) {
+        console.error('Transcode error:', error?.message ?? error);
+        reply.code(500).send({ error: 'Transcoding failed.' });
     }
 });
 

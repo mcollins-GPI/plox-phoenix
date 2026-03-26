@@ -118,24 +118,33 @@ function releaseWakeLock() {
 }
 
 // ---------------------------------------------------------------------------
-// MSE (MediaSource Extensions) engine for MP3 tracks.
+// MSE (MediaSource Extensions) engine — server-side transcoding to fMP4/Opus.
 //
 // Why: Firefox for Android fires `abort` + `emptied` whenever `audio.src` is
 // reassigned — even without calling `.load()`. These events trigger a ~5-second
 // background-tab grace-period timer that pauses playback. The only way to avoid
 // this is to never change `audio.src` at a track boundary.
 //
-// How: we create one persistent MediaSource, attach it as the sole `audio.src`,
-// and append MP3 bytes from each successive track into the SourceBuffer. The
-// HTMLMediaElement sees a single seamless stream and never gets an `abort` event.
+// How: the server transcodes any audio format to fragmented MP4 with Opus
+// (via ffmpeg). We create one persistent MediaSource on the client, attach it
+// as the sole `audio.src`, and append fMP4 data from each successive track
+// into the SourceBuffer. The HTMLMediaElement sees one continuous stream and
+// never gets an `abort` event.
 //
-// Non-MP3 formats fall through to the existing blob/stream path.
+// The first track's fMP4 is appended in full (init segment + media fragments).
+// Subsequent tracks strip the init segment (ftyp + moov boxes) and append
+// only the media fragments (moof + mdat), with an adjusted timestampOffset so
+// they play right after the previous track ends.
 // ---------------------------------------------------------------------------
+const MSE_CODEC = 'audio/mp4; codecs="opus"';
+const AUDIO_EXTENSIONS = new Set(['mp3', 'flac', 'ogg', 'oga', 'opus', 'm4a', 'aac', 'wav', 'aiff', 'aif', 'wma', 'webm']);
+
 const mse = {
     active: false,
     mediaSource: null,
     sourceBuffer: null,
     objectUrl: null,
+    _initSegment: null, // ArrayBuffer of the first track's init segment (ftyp + moov)
     // trackOffsets[i] = absolute MSE timeline start time (seconds) for playlist
     // index i. Track i occupies [trackOffsets[i], trackOffsets[i] + trackDurations[i]).
     trackOffsets: [],
@@ -144,15 +153,14 @@ const mse = {
     _appendQueue: Promise.resolve(),
 
     isSupported() {
-        return typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('audio/mpeg');
+        return typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(MSE_CODEC);
     },
     canHandle(trackPath) {
-        return (
-            String(trackPath || '')
-                .split('.')
-                .pop()
-                .toLowerCase() === 'mp3'
-        );
+        const ext = String(trackPath || '')
+            .split('.')
+            .pop()
+            .toLowerCase();
+        return AUDIO_EXTENSIONS.has(ext);
     },
 
     // Time within the current track (subtracting the track's start offset).
@@ -177,8 +185,41 @@ const mse = {
     },
 
     // -----------------------------------------------------------------------
-    // init — called once for the very first MP3 track.
-    // Creates a fresh MediaSource, sets audio.src, and appends the first blob.
+    // _findInitEnd — parse fMP4 top-level boxes to find the byte offset where
+    // the init segment (ftyp + moov) ends and media data (moof) begins.
+    // fMP4 box layout: each box is [4-byte size (big-endian)] [4-byte type].
+    //   size == 1 → extended size in the next 8 bytes (uint64).
+    //   size == 0 → box extends to EOF (shouldn't happen for init boxes).
+    // -----------------------------------------------------------------------
+    _findInitEnd(ab) {
+        const view = new DataView(ab);
+        let offset = 0;
+        while (offset + 8 <= ab.byteLength) {
+            let boxSize = view.getUint32(offset);
+            const boxType = String.fromCharCode(view.getUint8(offset + 4), view.getUint8(offset + 5), view.getUint8(offset + 6), view.getUint8(offset + 7));
+            if (boxSize === 1 && offset + 16 <= ab.byteLength) {
+                // Extended size — read as two 32-bit halves (JS doesn't have
+                // native uint64; files this large are unrealistic for init).
+                boxSize = view.getUint32(offset + 8) * 0x100000000 + view.getUint32(offset + 12);
+            }
+            if (boxSize === 0) {
+                // Box extends to end of file — treat everything as init.
+                return ab.byteLength;
+            }
+            // If we've reached a moof box, the init segment ends here.
+            if (boxType === 'moof') {
+                return offset;
+            }
+            offset += boxSize;
+        }
+        // No moof found — entire buffer is init (shouldn't happen).
+        return ab.byteLength;
+    },
+
+    // -----------------------------------------------------------------------
+    // init — called once for the very first track when MSE is used.
+    // Creates a fresh MediaSource, sets audio.src, and appends the first fMP4
+    // blob in full (init segment + media fragments).
     // -----------------------------------------------------------------------
     async init(blob, duration, playlistIndex) {
         this.teardown();
@@ -202,29 +243,41 @@ const mse = {
             this.mediaSource.addEventListener('error', onErr, { once: true });
         });
 
-        this.sourceBuffer = this.mediaSource.addSourceBuffer('audio/mpeg');
+        this.sourceBuffer = this.mediaSource.addSourceBuffer(MSE_CODEC);
         this.trackOffsets = [];
         this.trackDurations = [];
         this.appendedUpTo = -1;
         this._appendQueue = Promise.resolve();
         this.active = true;
 
-        await this._appendBuffer(await blob.arrayBuffer(), playlistIndex, 0);
+        const ab = await blob.arrayBuffer();
+
+        // Store the init segment so we can skip it when appending later tracks.
+        const initEnd = this._findInitEnd(ab);
+        this._initSegment = ab.slice(0, initEnd);
+        console.log(`mse.init: initSegment=${initEnd} bytes, total=${ab.byteLength} bytes`);
+
+        await this._appendBuffer(ab, playlistIndex, 0);
     },
 
     // -----------------------------------------------------------------------
     // appendNext — called at track-boundary time to seamlessly append the next
-    // track's bytes into the existing SourceBuffer.
+    // track's media fragments into the existing SourceBuffer.
+    // Strips the init segment (ftyp + moov) so the SourceBuffer doesn't see
+    // a duplicate initialisation — only moof+mdat pairs are appended.
     // -----------------------------------------------------------------------
     async appendNext(blob, duration, playlistIndex) {
-        // The next track starts right after the previous one ends on the
-        // timeline.  Use the known duration stored during preload.
         const prevIndex = playlistIndex - 1;
         const prevOffset = prevIndex >= 0 ? (this.trackOffsets[prevIndex] ?? 0) : 0;
         const prevDuration = prevIndex >= 0 ? (this.trackDurations[prevIndex] ?? 0) : 0;
         const startOffset = prevOffset + prevDuration;
 
-        await this._appendBuffer(await blob.arrayBuffer(), playlistIndex, startOffset);
+        const fullAb = await blob.arrayBuffer();
+        const initEnd = this._findInitEnd(fullAb);
+        const mediaOnly = fullAb.slice(initEnd);
+        console.log(`mse.appendNext: stripped ${initEnd} init bytes, appending ${mediaOnly.byteLength} media bytes at offset ${startOffset.toFixed(2)}`);
+
+        await this._appendBuffer(mediaOnly, playlistIndex, startOffset);
     },
 
     // -----------------------------------------------------------------------
@@ -252,6 +305,7 @@ const mse = {
             }
             this.trackDurations[playlistIndex] = bufferedEnd - timestampOffset;
             this.appendedUpTo = playlistIndex;
+            console.log(`mse._appendBuffer: track ${playlistIndex} offset=${timestampOffset.toFixed(2)} dur=${this.trackDurations[playlistIndex]?.toFixed(2)} bufferedEnd=${bufferedEnd.toFixed(2)}`);
             this._evict();
         });
         return this._appendQueue;
@@ -289,6 +343,7 @@ const mse = {
     teardown() {
         this.active = false;
         this._appendQueue = Promise.resolve();
+        this._initSegment = null;
         try {
             if (this.mediaSource) {
                 if (this.mediaSource.readyState === 'open') {
@@ -1631,7 +1686,7 @@ async function playIndex(index) {
         // ------------------------------------------------------------------
         const mpegMseOk = mse.isSupported() && mse.canHandle(item.track.path_lower);
         console.log(
-            `playIndex(${index}): MediaSource=${typeof MediaSource !== 'undefined'} isTypeSupported(audio/mpeg)=${typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('audio/mpeg')} canHandle=${mse.canHandle(item.track.path_lower)} → path=${mpegMseOk ? 'MSE' : 'blob/src'}`,
+            `playIndex(${index}): MediaSource=${typeof MediaSource !== 'undefined'} isTypeSupported(${MSE_CODEC})=${typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(MSE_CODEC)} canHandle=${mse.canHandle(item.track.path_lower)} → path=${mpegMseOk ? 'MSE' : 'blob/src'}`,
         );
 
         if (mpegMseOk) {
@@ -1671,7 +1726,7 @@ async function playIndex(index) {
                 elements.audioPreload.removeAttribute('src');
                 elements.audioPreload.load();
 
-                const url = buildUrl('track', { path: item.track.path_lower });
+                const url = buildUrl('track/transcode', { path: item.track.path_lower });
                 const response = await apiFetch(url);
                 blob = await response.blob();
                 startDuration = null; // will be derived from buffered range
@@ -1837,8 +1892,12 @@ async function preloadNextTrack() {
         // ends—even with the phone screen off—no new network request is needed.
         // Firefox for Android throttles stream fetches in background tabs,
         // causing 60+ second delays if we use a stream URL at transition time.
-        console.log(`Preloading track ${nextIndex} as blob…`);
-        const url = buildUrl('track', { path: nextItem.track.path_lower });
+        // When MSE is active, fetch from the transcode endpoint (fMP4/Opus) so
+        // the blob can be appended directly into the SourceBuffer.
+        const useMse = mse.active && mse.isSupported() && mse.canHandle(nextItem.track.path_lower);
+        const endpoint = useMse ? 'track/transcode' : 'track';
+        console.log(`Preloading track ${nextIndex} as blob (endpoint=${endpoint})…`);
+        const url = buildUrl(endpoint, { path: nextItem.track.path_lower });
         const response = await apiFetch(url);
         const blob = await response.blob();
         preloadBlob = blob;
