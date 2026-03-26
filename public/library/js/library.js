@@ -80,6 +80,41 @@ const state = {
 let preloadBlobUrl = null;
 let activeBlobUrl = null;
 
+// Screen Wake Lock — held while audio is playing so the screen stays on and
+// Firefox never applies its background-tab throttle (~5 s pause after src change).
+let wakeLockSentinel = null;
+
+async function acquireWakeLock() {
+    if (!('wakeLock' in navigator)) {
+        return;
+    }
+    // Already held.
+    if (wakeLockSentinel && !wakeLockSentinel.released) {
+        return;
+    }
+    // Can only request while the document is visible.
+    if (document.hidden) {
+        return;
+    }
+    try {
+        wakeLockSentinel = await navigator.wakeLock.request('screen');
+        wakeLockSentinel.addEventListener('release', () => {
+            console.log('Wake lock released');
+        });
+        console.log('Wake lock acquired');
+    } catch (err) {
+        // Permission denied or not supported — non-fatal
+        console.warn('Wake lock request failed:', err?.message ?? err);
+    }
+}
+
+function releaseWakeLock() {
+    if (wakeLockSentinel && !wakeLockSentinel.released) {
+        wakeLockSentinel.release().catch(() => {});
+    }
+    wakeLockSentinel = null;
+}
+
 const tagCache = new Map();
 
 function redirectToLogin() {
@@ -447,12 +482,19 @@ function initializeCustomAudioControls() {
     elements.audioController.addEventListener('play', () => {
         updateAudioControls();
         updateMediaSessionPositionState();
+        acquireWakeLock();
         if ('mediaSession' in navigator) {
             navigator.mediaSession.playbackState = 'playing';
         }
     });
     elements.audioController.addEventListener('pause', () => {
         updateAudioControls();
+        // Only release the wake lock when the user has deliberately paused,
+        // or when the track actually ended (the ended event fires just before
+        // this). Don't release mid-track on a transient external pause.
+        if (state.userPaused || elements.audioController.ended) {
+            releaseWakeLock();
+        }
         if ('mediaSession' in navigator) {
             navigator.mediaSession.playbackState = 'paused';
         }
@@ -1583,6 +1625,12 @@ async function initializeLibrary() {
                 elements.audioController.play().catch((err) => {
                     console.warn('Auto-resume rejected:', err?.message ?? String(err));
                 });
+            }
+
+            // Re-acquire the wake lock (it's automatically released when the
+            // page becomes hidden, so we must request it again on restore).
+            if (!elements.audioController.paused || !state.userPaused) {
+                acquireWakeLock();
             }
 
             // Retry preload if it failed while screen was off.
