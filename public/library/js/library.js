@@ -1629,7 +1629,12 @@ async function playIndex(index) {
         //  explicitly jumps to a different track. Subsequent auto-advances go
         //  through advanceToPreloaded which appends into the existing buffer.)
         // ------------------------------------------------------------------
-        if (mse.isSupported() && mse.canHandle(item.track.path_lower)) {
+        const mpegMseOk = mse.isSupported() && mse.canHandle(item.track.path_lower);
+        console.log(
+            `playIndex(${index}): MediaSource=${typeof MediaSource !== 'undefined'} isTypeSupported(audio/mpeg)=${typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('audio/mpeg')} canHandle=${mse.canHandle(item.track.path_lower)} → path=${mpegMseOk ? 'MSE' : 'blob/src'}`,
+        );
+
+        if (mpegMseOk) {
             // Tear down any previous MSE session.
             mse.teardown();
             // Also revoke any plain blob URL for the previous track.
@@ -2302,9 +2307,14 @@ function initDebugPanel() {
 
         const msLines = ms ? [`ms.state:  ${ms.playbackState}`, `ms.title:  ${ms.metadata?.title ?? '—'}`, `ms.artist: ${ms.metadata?.artist ?? '—'}`] : ['mediaSession: not supported'];
 
+        const mseSupported = typeof MediaSource !== 'undefined';
+        const mpegSupported = mseSupported && MediaSource.isTypeSupported('audio/mpeg');
+        const currentPath = mse.active ? 'MSE' : 'blob/src';
+        const mseLines = [`mse.path:  ${currentPath}  active=${mse.active}  appended=${mse.appendedUpTo}`, `mse.sup:   MediaSource=${mseSupported}  audio/mpeg=${mpegSupported}`];
+
         const playlistLine = `playlist:  ${state.currentIndex + 1} / ${state.playlist.length}  repeat=${state.repeatMode}`;
 
-        return [...audioLines, ...msLines, playlistLine].join('\n');
+        return [...audioLines, ...msLines, ...mseLines, playlistLine].join('\n');
     }
 
     function openPanel() {
