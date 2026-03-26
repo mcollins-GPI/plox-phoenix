@@ -2308,9 +2308,10 @@ function initDebugPanel() {
         const msLines = ms ? [`ms.state:  ${ms.playbackState}`, `ms.title:  ${ms.metadata?.title ?? '—'}`, `ms.artist: ${ms.metadata?.artist ?? '—'}`] : ['mediaSession: not supported'];
 
         const mseSupported = typeof MediaSource !== 'undefined';
-        const mpegSupported = mseSupported && MediaSource.isTypeSupported('audio/mpeg');
+        const codecs = ['audio/mpeg', 'audio/webm; codecs="opus"', 'audio/webm; codecs="vorbis"', 'audio/mp4; codecs="mp4a.40.2"', 'audio/mp4; codecs="opus"'];
+        const codecResults = mseSupported ? codecs.map((c) => `${c.padEnd(32)} ${MediaSource.isTypeSupported(c) ? 'YES' : 'no'}`).join('\n           ') : 'MediaSource not available';
         const currentPath = mse.active ? 'MSE' : 'blob/src';
-        const mseLines = [`mse.path:  ${currentPath}  active=${mse.active}  appended=${mse.appendedUpTo}`, `mse.sup:   MediaSource=${mseSupported}  audio/mpeg=${mpegSupported}`];
+        const mseLines = [`mse.path:  ${currentPath}  active=${mse.active}  appended=${mse.appendedUpTo}`, `mse.codec: ${codecResults}`];
 
         const playlistLine = `playlist:  ${state.currentIndex + 1} / ${state.playlist.length}  repeat=${state.repeatMode}`;
 
@@ -2348,6 +2349,15 @@ function initDebugPanel() {
     });
 
     addEntry('log', 'Debug panel ready. Tap DBG to open/close.');
+
+    // Log MSE codec support once so it appears in the debug log.
+    if (typeof MediaSource !== 'undefined') {
+        const probes = ['audio/mpeg', 'audio/webm; codecs="opus"', 'audio/webm; codecs="vorbis"', 'audio/mp4; codecs="mp4a.40.2"', 'audio/mp4; codecs="opus"'];
+        const results = probes.map((c) => `${c}=${MediaSource.isTypeSupported(c)}`).join('  ');
+        addEntry('log', `MSE codecs: ${results}`);
+    } else {
+        addEntry('log', 'MediaSource API not available');
+    }
 }
 
 window.addEventListener('DOMContentLoaded', () => {
