@@ -891,11 +891,11 @@ registerAliasedRoute('GET', '/track/transcode', { preHandler: requireAuth }, asy
             'pipe:0', // read from stdin
             '-vn', // drop any embedded art/video
             '-c:a',
-            'libopus', // Opus codec
+            'aac', // AAC codec — most reliable for MSE across browsers
             '-b:a',
             '128k', // 128 kbps
             '-ar',
-            '48000', // 48 kHz (Opus default/preferred)
+            '44100', // 44.1 kHz (standard for AAC)
             '-ac',
             '2', // stereo
             '-f',

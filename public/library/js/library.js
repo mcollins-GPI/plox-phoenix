@@ -136,7 +136,7 @@ function releaseWakeLock() {
 // only the media fragments (moof + mdat), with an adjusted timestampOffset so
 // they play right after the previous track ends.
 // ---------------------------------------------------------------------------
-const MSE_CODEC = 'audio/mp4; codecs="opus"';
+const MSE_CODEC = 'audio/mp4; codecs="mp4a.40.2"';
 const AUDIO_EXTENSIONS = new Set(['mp3', 'flac', 'ogg', 'oga', 'opus', 'm4a', 'aac', 'wav', 'aiff', 'aif', 'wma', 'webm']);
 
 const mse = {
@@ -255,6 +255,25 @@ const mse = {
         // Store the init segment so we can skip it when appending later tracks.
         const initEnd = this._findInitEnd(ab);
         this._initSegment = ab.slice(0, initEnd);
+
+        // Diagnostic: log the top-level fMP4 box structure so we can verify
+        // that the transcode output is properly fragmented.
+        {
+            const dv = new DataView(ab);
+            let off = 0;
+            const boxes = [];
+            while (off + 8 <= ab.byteLength && boxes.length < 20) {
+                let sz = dv.getUint32(off);
+                const tp = String.fromCharCode(dv.getUint8(off + 4), dv.getUint8(off + 5), dv.getUint8(off + 6), dv.getUint8(off + 7));
+                if (sz === 1 && off + 16 <= ab.byteLength) {
+                    sz = dv.getUint32(off + 8) * 0x100000000 + dv.getUint32(off + 12);
+                }
+                boxes.push(`${tp}@${off}(${sz})`);
+                if (sz === 0) break;
+                off += sz;
+            }
+            console.log(`mse.init: fMP4 boxes: ${boxes.join(' ')}`);
+        }
         console.log(`mse.init: initSegment=${initEnd} bytes, total=${ab.byteLength} bytes`);
 
         await this._appendBuffer(ab, playlistIndex, 0);
