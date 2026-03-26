@@ -1563,13 +1563,26 @@ async function initializeLibrary() {
 
     elements.audioController.addEventListener('ended', () => nextTrack());
 
-    // Auto-resume if the browser (e.g. Firefox for Android) paused playback
-    // externally while the screen was off. When the user unlocks their phone
-    // and the page becomes visible again, resume if it wasn't a user pause.
+    // When the page becomes visible again (screen unlocked):
+    // 1. Auto-resume if Firefox paused playback externally.
+    // 2. Retry preloading the next track if the background fetch failed.
     document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && elements.audioController.paused && !state.userPaused && state.currentIndex >= 0 && !elements.audioController.ended) {
-            console.log('Visibility restored — resuming after external pause');
-            elements.audioController.play().catch(() => {});
+        console.log(`visibilitychange: hidden=${document.hidden} paused=${elements.audioController.paused} userPaused=${state.userPaused} preloadedIndex=${state.preloadedIndex}`);
+
+        if (!document.hidden) {
+            // Resume playback if it was paused externally (not by the user).
+            if (elements.audioController.paused && !state.userPaused && state.currentIndex >= 0 && !elements.audioController.ended) {
+                console.log('Visibility restored — resuming after external pause');
+                elements.audioController.play().catch((err) => {
+                    console.warn('Auto-resume rejected:', err?.message ?? String(err));
+                });
+            }
+
+            // Retry preload if it failed while screen was off.
+            if (state.preloadedIndex < 0 && state.currentIndex >= 0) {
+                console.log('Visibility restored — retrying failed preload');
+                preloadNextTrack();
+            }
         }
     });
 
