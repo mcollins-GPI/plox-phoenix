@@ -2230,19 +2230,26 @@ async function initializeLibrary() {
         // MSE track-boundary detection.
         // When MSE is active the <audio> element plays a single long timeline.
         // There is no native 'ended' event at individual track boundaries, so
-        // we watch currentTime.  When the playhead passes the start of the
-        // NEXT track's data in the SourceBuffer we know the current track has
-        // finished and should advance.
+        // we watch currentTime.  When the playhead reaches (or passes) the end
+        // of the current track's data we advance to the next track.
         if (mse.active) {
-            const nextIdx = state.currentIndex + 1;
-            if (nextIdx < state.playlist.length) {
-                const nextOffset = mse.trackOffsets[nextIdx];
-                if (nextOffset !== undefined && rawTime >= nextOffset && mse.appendedUpTo >= nextIdx) {
-                    // The playhead has entered the next track's region.  Advance.
-                    // nextTrack() → advanceToPreloaded(nextIdx) will update
-                    // state.currentIndex, so this branch won't re-fire.
+            const curIdx = state.currentIndex;
+            const curOffset = mse.trackOffsets[curIdx] ?? 0;
+            const curDuration = mse.trackDurations[curIdx] ?? 0;
+            const curEnd = curOffset + curDuration;
+            // Use a small tolerance (0.15 s) because timeupdate fires at ~250 ms
+            // intervals and the playhead may not land exactly on the boundary.
+            if (curDuration > 0 && rawTime >= curEnd - 0.15) {
+                const nextIdx = curIdx + 1;
+                if (nextIdx < state.playlist.length) {
+                    console.log(`timeupdate: MSE boundary hit — rawTime=${rawTime.toFixed(2)} curEnd=${curEnd.toFixed(2)}, advancing to track ${nextIdx}`);
+                    nextTrack();
+                } else if (state.repeatMode === 'all' && state.playlist.length > 0) {
+                    console.log(`timeupdate: MSE boundary hit (repeat-all) — rawTime=${rawTime.toFixed(2)} curEnd=${curEnd.toFixed(2)}, wrapping to track 0`);
                     nextTrack();
                 }
+                // else: last track, no repeat — let it sit; the 'ended' event
+                // on the MediaSource will handle it when endOfStream is called.
             }
         }
     });
