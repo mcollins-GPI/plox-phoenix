@@ -202,13 +202,15 @@ const mse = {
                 // native uint64; files this large are unrealistic for init).
                 boxSize = view.getUint32(offset + 8) * 0x100000000 + view.getUint32(offset + 12);
             }
+            // If we've reached a moof box, the init segment ends here.
+            // Check this BEFORE the size==0 bail-out — ffmpeg may write the
+            // last moof with size 0 ("extends to EOF") when piping to stdout.
+            if (boxType === 'moof') {
+                return offset;
+            }
             if (boxSize === 0) {
                 // Box extends to end of file — treat everything as init.
                 return ab.byteLength;
-            }
-            // If we've reached a moof box, the init segment ends here.
-            if (boxType === 'moof') {
-                return offset;
             }
             offset += boxSize;
         }

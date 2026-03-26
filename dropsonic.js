@@ -901,7 +901,9 @@ registerAliasedRoute('GET', '/track/transcode', { preHandler: requireAuth }, asy
             '-f',
             'mp4', // MP4 container
             '-movflags',
-            'frag_keyframe+empty_moov+default_base_moof',
+            'empty_moov+default_base_moof',
+            '-frag_duration',
+            '10000000', // 10-second fragments (microseconds) — ensures proper box sizes when piping
             'pipe:1', // write to stdout
         ]);
 
