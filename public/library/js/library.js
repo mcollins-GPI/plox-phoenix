@@ -71,7 +71,14 @@ const state = {
     dragIndex: null,
     playlistTagHydrationInFlight: false,
     preloadedIndex: -1,
+    // true only when the user explicitly clicked pause (vs. a system/browser pause)
+    userPaused: false,
 };
+
+// Blob URLs for next-track preloading and the currently active track.
+// Keeping these separate from `state` avoids serialisation surprises.
+let preloadBlobUrl = null;
+let activeBlobUrl = null;
 
 const tagCache = new Map();
 
@@ -385,12 +392,14 @@ function initializeCustomAudioControls() {
     if (elements.audioPlayToggle) {
         elements.audioPlayToggle.addEventListener('click', async () => {
             if (elements.audioController.paused) {
+                state.userPaused = false;
                 try {
                     await elements.audioController.play();
                 } catch {
                     // autoplay restrictions may block play
                 }
             } else {
+                state.userPaused = true;
                 elements.audioController.pause();
             }
             updateAudioControls();
@@ -400,12 +409,14 @@ function initializeCustomAudioControls() {
     if (elements.miniPlayToggle) {
         elements.miniPlayToggle.addEventListener('click', async () => {
             if (elements.audioController.paused) {
+                state.userPaused = false;
                 try {
                     await elements.audioController.play();
                 } catch {
                     // autoplay restrictions may block play
                 }
             } else {
+                state.userPaused = true;
                 elements.audioController.pause();
             }
             updateAudioControls();
@@ -1210,22 +1221,34 @@ async function playIndex(index) {
     updateMediaSession(item.track, item.artist.name, item.album.name);
 
     try {
-        const usePreloaded = state.preloadedIndex === index && elements.audioPreload.src && elements.audioPreload.readyState >= 2;
+        // Revoke the blob URL of the track we are replacing (if any).
+        if (activeBlobUrl) {
+            URL.revokeObjectURL(activeBlobUrl);
+            activeBlobUrl = null;
+        }
+
+        const usePreloaded = state.preloadedIndex === index && preloadBlobUrl;
 
         if (usePreloaded) {
-            const previousUrl = elements.audioController.src;
-            elements.audioController.src = elements.audioPreload.src;
+            activeBlobUrl = preloadBlobUrl;
+            preloadBlobUrl = null;
+            elements.audioController.src = activeBlobUrl;
             elements.audioController.currentTime = 0;
             elements.audioPreload.removeAttribute('src');
             elements.audioPreload.load();
             state.preloadedIndex = -1;
         } else {
-            const streamUrl = buildStreamUrl(item.track.path_lower);
-            elements.audioController.src = streamUrl;
-            elements.audioController.load();
+            // Discard any stale preload blob.
+            if (preloadBlobUrl) {
+                URL.revokeObjectURL(preloadBlobUrl);
+                preloadBlobUrl = null;
+            }
             state.preloadedIndex = -1;
             elements.audioPreload.removeAttribute('src');
             elements.audioPreload.load();
+            const streamUrl = buildStreamUrl(item.track.path_lower);
+            elements.audioController.src = streamUrl;
+            elements.audioController.load();
         }
 
         // Call play() directly without waiting for canplay first. Awaiting
@@ -1242,6 +1265,7 @@ async function playIndex(index) {
                 try {
                     console.warn('Stream failed, falling back to buffered fetch:', item.track.path_lower);
                     const blobUrl = await fetchTrackAsBlob(item.track.path_lower);
+                    activeBlobUrl = blobUrl;
                     elements.audioController.src = blobUrl;
                     elements.audioController.load();
                     await elements.audioController.play();
@@ -1251,6 +1275,11 @@ async function playIndex(index) {
             }
             // autoplay restrictions are acceptable
         }
+
+        // Start preloading the next track as a full blob immediately so that
+        // no network request is needed when the current track ends — critical
+        // for Firefox for Android which throttles stream fetches with screen off.
+        preloadNextTrack();
 
         // Hydrate tags via small range request (non-blocking)
         try {
@@ -1269,7 +1298,7 @@ async function playIndex(index) {
     }
 }
 
-function preloadNextTrack() {
+async function preloadNextTrack() {
     let nextIndex = -1;
 
     if (state.repeatMode === 'one') {
@@ -1293,11 +1322,28 @@ function preloadNextTrack() {
     }
 
     try {
-        const streamUrl = buildStreamUrl(nextItem.track.path_lower);
-        elements.audioPreload.src = streamUrl;
+        // Discard any previous preload blob before starting a new download.
+        if (preloadBlobUrl) {
+            URL.revokeObjectURL(preloadBlobUrl);
+            preloadBlobUrl = null;
+        }
+        state.preloadedIndex = -1;
+        elements.audioPreload.removeAttribute('src');
+        elements.audioPreload.load();
+
+        // Fully buffer the next track as a blob so that when the current track
+        // ends—even with the phone screen off—no new network request is needed.
+        // Firefox for Android throttles stream fetches in background tabs,
+        // causing 60+ second delays if we use a stream URL at transition time.
+        console.log(`Preloading track ${nextIndex} as blob…`);
+        const blobUrl = await fetchTrackAsBlob(nextItem.track.path_lower);
+        preloadBlobUrl = blobUrl;
+        elements.audioPreload.src = blobUrl;
         elements.audioPreload.load();
         state.preloadedIndex = nextIndex;
-    } catch {
+        console.log(`Preloaded track ${nextIndex} (blob ready)`);
+    } catch (err) {
+        console.warn('Preload failed:', err?.message ?? err);
         // preload is best-effort
     }
 }
@@ -1327,8 +1373,14 @@ function registerMediaSessionHandlers() {
     }
 
     const handlers = {
-        play: () => elements.audioController.play(),
-        pause: () => elements.audioController.pause(),
+        play: () => {
+            state.userPaused = false;
+            return elements.audioController.play();
+        },
+        pause: () => {
+            state.userPaused = true;
+            elements.audioController.pause();
+        },
         previoustrack: () => previousTrack(),
         nexttrack: () => nextTrack(),
         seekto: (details) => {
@@ -1510,6 +1562,17 @@ async function initializeLibrary() {
     }
 
     elements.audioController.addEventListener('ended', () => nextTrack());
+
+    // Auto-resume if the browser (e.g. Firefox for Android) paused playback
+    // externally while the screen was off. When the user unlocks their phone
+    // and the page becomes visible again, resume if it wasn't a user pause.
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && elements.audioController.paused && !state.userPaused && state.currentIndex >= 0 && !elements.audioController.ended) {
+            console.log('Visibility restored — resuming after external pause');
+            elements.audioController.play().catch(() => {});
+        }
+    });
+
     elements.audioController.addEventListener('loadedmetadata', () => {
         if (state.currentIndex >= 0) {
             updateNowPlaying(state.playlist[state.currentIndex]);
@@ -1519,7 +1582,9 @@ async function initializeLibrary() {
         const duration = elements.audioController.duration;
         const currentTime = elements.audioController.currentTime;
 
-        if (Number.isFinite(duration) && duration > 0 && duration - currentTime < 30) {
+        // Fallback: trigger preload if not already in progress (e.g. if the
+        // immediate preload after play() was skipped due to an error).
+        if (Number.isFinite(duration) && duration > 0 && duration - currentTime < 60 && state.preloadedIndex < 0) {
             preloadNextTrack();
         }
     });
