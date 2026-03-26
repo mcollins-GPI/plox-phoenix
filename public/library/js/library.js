@@ -1536,7 +1536,174 @@ async function initializeLibrary() {
     renderArtists();
 }
 
+// ---------------------------------------------------------------------------
+// Debug panel — toggled by the "DBG" button in the topbar.
+// Shows live audio/MediaSession state and captures console output + audio
+// events so the app can be debugged on mobile without USB remote debugging.
+// ---------------------------------------------------------------------------
+function initDebugPanel() {
+    const panel = document.getElementById('debug-panel');
+    const statusEl = document.getElementById('debug-status');
+    const logEl = document.getElementById('debug-log');
+    const toggleBtn = document.getElementById('debug-toggle');
+    const closeBtn = document.getElementById('debug-close-btn');
+    const clearBtn = document.getElementById('debug-clear-btn');
+
+    if (!panel || !statusEl || !logEl || !toggleBtn) {
+        return;
+    }
+
+    const MAX_ENTRIES = 60;
+    const entries = [];
+    let statusTimer = null;
+
+    const LEVEL_STYLE = {
+        log: 'color:#c8ffc8',
+        warn: 'color:#fde68a',
+        error: 'color:#fca5a5',
+        event: 'color:#93c5fd',
+        info: 'color:#c8ffc8',
+    };
+
+    function ts() {
+        const d = new Date();
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}.${String(d.getMilliseconds()).padStart(3, '0')}`;
+    }
+
+    function addEntry(level, text) {
+        if (entries.length >= MAX_ENTRIES) {
+            entries.shift();
+        }
+        entries.push({ level, text, time: ts() });
+        if (panel.style.display !== 'none') {
+            renderLog();
+        }
+    }
+
+    function renderLog() {
+        logEl.innerHTML = entries
+            .map((e) => `<div style="${LEVEL_STYLE[e.level] || LEVEL_STYLE.log}"><span style="color:#555">${e.time}</span> <span style="color:#888">[${e.level}]</span> ${escapeHtml(e.text)}</div>`)
+            .join('');
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function escapeHtml(str) {
+        return String(str ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function argsToString(args) {
+        return args
+            .map((a) => {
+                if (a instanceof Error) return `${a.name}: ${a.message}`;
+                if (typeof a === 'object' && a !== null) {
+                    try {
+                        return JSON.stringify(a);
+                    } catch {
+                        return String(a);
+                    }
+                }
+                return String(a ?? '');
+            })
+            .join(' ');
+    }
+
+    // Intercept console output
+    ['log', 'warn', 'error', 'info'].forEach((method) => {
+        const original = console[method].bind(console);
+        console[method] = (...args) => {
+            original(...args);
+            addEntry(method === 'info' ? 'log' : method, argsToString(args));
+        };
+    });
+
+    // Capture all notable audio element events
+    const audioEvents = [
+        'play',
+        'playing',
+        'pause',
+        'ended',
+        'seeking',
+        'seeked',
+        'waiting',
+        'stalled',
+        'suspend',
+        'canplay',
+        'canplaythrough',
+        'loadedmetadata',
+        'loadeddata',
+        'emptied',
+        'error',
+        'abort',
+    ];
+
+    audioEvents.forEach((evName) => {
+        elements.audioController.addEventListener(evName, () => {
+            const audio = elements.audioController;
+            let extra = '';
+            if (evName === 'error' && audio.error) {
+                extra = ` code=${audio.error.code} "${audio.error.message}"`;
+            }
+            addEntry('event', `audio:${evName}${extra} t=${audio.currentTime.toFixed(1)}/${Number.isFinite(audio.duration) ? audio.duration.toFixed(1) : '?'} rs=${audio.readyState}`);
+        });
+    });
+
+    function getStatus() {
+        const audio = elements.audioController;
+        const ms = 'mediaSession' in navigator ? navigator.mediaSession : null;
+
+        const audioLines = [
+            `src:       ${audio.src ? audio.src.slice(-60) : '(none)'}`,
+            `state:     ${audio.paused ? 'paused' : 'playing'}  readyState=${audio.readyState}  networkState=${audio.networkState}`,
+            `time:      ${audio.currentTime.toFixed(2)} / ${Number.isFinite(audio.duration) ? audio.duration.toFixed(2) : '?'}`,
+            `error:     ${audio.error ? `code=${audio.error.code} ${audio.error.message}` : 'none'}`,
+        ];
+
+        const msLines = ms ? [`ms.state:  ${ms.playbackState}`, `ms.title:  ${ms.metadata?.title ?? '—'}`, `ms.artist: ${ms.metadata?.artist ?? '—'}`] : ['mediaSession: not supported'];
+
+        const playlistLine = `playlist:  ${state.currentIndex + 1} / ${state.playlist.length}  repeat=${state.repeatMode}`;
+
+        return [...audioLines, ...msLines, playlistLine].join('\n');
+    }
+
+    function openPanel() {
+        panel.style.display = 'flex';
+        renderLog();
+        statusEl.textContent = getStatus();
+        statusTimer = setInterval(() => {
+            statusEl.textContent = getStatus();
+        }, 500);
+    }
+
+    function closePanel() {
+        panel.style.display = 'none';
+        clearInterval(statusTimer);
+        statusTimer = null;
+    }
+
+    toggleBtn.addEventListener('click', () => {
+        if (panel.style.display === 'none') {
+            openPanel();
+        } else {
+            closePanel();
+        }
+    });
+
+    closeBtn.addEventListener('click', closePanel);
+
+    clearBtn.addEventListener('click', () => {
+        entries.length = 0;
+        renderLog();
+    });
+
+    addEntry('log', 'Debug panel ready. Tap DBG to open/close.');
+}
+
 window.addEventListener('DOMContentLoaded', () => {
+    initDebugPanel();
     initializeLibrary().catch((error) => {
         console.error(error);
         setEmptyState(elements.artistList, error.message || 'Unable to load library.');

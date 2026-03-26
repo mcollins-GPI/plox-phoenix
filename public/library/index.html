@@ -20,6 +20,16 @@
                 <span id="library-user" class="text-muted ms-2"></span>
             </div>
             <div class="d-flex gap-2 library-topbar-actions">
+                <button
+                    id="debug-toggle"
+                    class="btn btn-sm btn-outline-secondary"
+                    type="button"
+                    title="Debug panel"
+                    aria-label="Open debug panel"
+                    style="opacity: 0.45; font-size: 0.7rem; padding-inline: 0.5rem"
+                >
+                    DBG
+                </button>
                 <a class="btn btn-sm btn-outline-secondary" href="../account/"><span class="btn-label">Account</span><span class="btn-icon" aria-hidden="true">&#9881;</span></a>
                 <button id="library-logout" class="btn btn-sm btn-outline-danger" type="button"><span class="btn-label">Logout</span><span class="btn-icon" aria-hidden="true">&#10140;</span></button>
             </div>
@@ -79,5 +89,38 @@
         <script src="../data/runtime-config.js"></script>
         <script src="js/jsmediatags.js"></script>
         <script src="js/library.js"></script>
+
+        <!-- Debug panel overlay — toggled by the DBG button in the topbar -->
+        <div
+            id="debug-panel"
+            role="dialog"
+            aria-label="Debug panel"
+            aria-modal="true"
+            style="
+                display: none;
+                position: fixed;
+                inset: 0;
+                z-index: 9999;
+                background: rgba(10, 10, 15, 0.96);
+                color: #c8ffc8;
+                font-family: ui-monospace, monospace;
+                font-size: 11px;
+                flex-direction: column;
+            "
+        >
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #2a2a3a; flex-shrink: 0; background: rgba(0, 0, 0, 0.4)">
+                <strong style="color: #fff; font-size: 13px">Dropsonic Debug</strong>
+                <div style="display: flex; gap: 8px">
+                    <button id="debug-clear-btn" type="button" style="background: #2a2a3a; border: none; color: #aaa; padding: 2px 10px; border-radius: 4px; cursor: pointer; font-size: 11px">
+                        Clear
+                    </button>
+                    <button id="debug-close-btn" type="button" style="background: none; border: none; color: #f66; font-size: 18px; line-height: 1; cursor: pointer" aria-label="Close debug panel">
+                        ✕
+                    </button>
+                </div>
+            </div>
+            <div id="debug-status" style="padding: 8px 12px; border-bottom: 1px solid #2a2a3a; flex-shrink: 0; color: #7dd3fc; white-space: pre; line-height: 1.6"></div>
+            <div id="debug-log" style="flex: 1; overflow-y: auto; padding: 8px 12px; line-height: 1.6"></div>
+        </div>
     </body>
 </html>
