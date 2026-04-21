@@ -8,16 +8,31 @@ const fileTypesToExclude = [...nonMusicFileTypes, ...imageFileTypes];
 const repeatModes = ['off', 'all', 'one'];
 
 // Default artwork shown in the OS media notification when no album art is
-// available. Firefox for Android requires artwork to display the full lock
-// screen player with skip controls.
-const DEFAULT_ARTWORK_URI =
-    'data:image/svg+xml,' +
-    encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">' +
-            '<rect width="128" height="128" rx="16" fill="#1a1a2e"/>' +
-            '<text x="64" y="90" text-anchor="middle" font-size="80" fill="#ffffff">♪</text>' +
-            '</svg>',
-    );
+// available. Firefox for Android requires a raster PNG (not SVG) to display
+// the full lock-screen player with progress bar and skip controls.
+function _buildDefaultArtworkUri() {
+    try {
+        const size = 512;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            return null;
+        }
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, size, size);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `${Math.round(size * 0.625)}px system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText('\u266a', size / 2, Math.round(size * 0.703));
+        return canvas.toDataURL('image/png');
+    } catch {
+        return null;
+    }
+}
+const DEFAULT_ARTWORK_URI = _buildDefaultArtworkUri();
 
 const ICONS = {
     play: '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.5 3.5v17l13-8.5z"/></svg>',
@@ -150,6 +165,7 @@ const mse = {
     trackOffsets: [],
     trackDurations: [],
     appendedUpTo: -1, // highest playlist index whose bytes are in the SourceBuffer
+    _pendingAppend: -1, // playlist index currently being appended (guards against double-appends)
     _appendQueue: Promise.resolve(),
 
     isSupported() {
@@ -161,6 +177,12 @@ const mse = {
             .pop()
             .toLowerCase();
         return AUDIO_EXTENSIONS.has(ext);
+    },
+
+    // Returns true if the given playlist index has already been appended into
+    // the SourceBuffer (either as the first track via init() or via appendNext()).
+    isAppended(playlistIndex) {
+        return this.active && this.appendedUpTo >= playlistIndex;
     },
 
     // Time within the current track (subtracting the track's start offset).
@@ -288,6 +310,14 @@ const mse = {
     // a duplicate initialisation — only moof+mdat pairs are appended.
     // -----------------------------------------------------------------------
     async appendNext(blob, duration, playlistIndex) {
+        // Guard against double-appends from concurrent calls (e.g. eager append
+        // in preloadNextTrack races with an explicit advanceToPreloaded call).
+        if (this.isAppended(playlistIndex) || this._pendingAppend === playlistIndex) {
+            console.log(`mse.appendNext: track ${playlistIndex} already appended or in-flight — skipping`);
+            return this._appendQueue;
+        }
+        this._pendingAppend = playlistIndex;
+
         const prevIndex = playlistIndex - 1;
         const prevOffset = prevIndex >= 0 ? (this.trackOffsets[prevIndex] ?? 0) : 0;
         const prevDuration = prevIndex >= 0 ? (this.trackDurations[prevIndex] ?? 0) : 0;
@@ -299,6 +329,7 @@ const mse = {
         console.log(`mse.appendNext: stripped ${initEnd} init bytes, appending ${mediaOnly.byteLength} media bytes at offset ${startOffset.toFixed(2)}`);
 
         await this._appendBuffer(mediaOnly, playlistIndex, startOffset);
+        this._pendingAppend = -1;
     },
 
     // -----------------------------------------------------------------------
@@ -365,6 +396,7 @@ const mse = {
         this.active = false;
         this._appendQueue = Promise.resolve();
         this._initSegment = null;
+        this._pendingAppend = -1;
         try {
             if (this.mediaSource) {
                 if (this.mediaSource.readyState === 'open') {
@@ -1552,82 +1584,72 @@ async function advanceToPreloaded(index) {
         return;
     }
 
-    if (state.preloadedIndex !== index || !preloadBlobUrl) {
-        // No preloaded blob — fall back to normal playIndex().
-        console.log(`advanceToPreloaded(${index}): no blob, falling back to playIndex`);
-        return playIndex(index);
-    }
-
     const item = state.playlist[index];
-    const isMp3 = mse.canHandle(item.track.path_lower);
+    const isMse = mse.active && mse.isSupported() && mse.canHandle(item.track.path_lower);
 
     // -----------------------------------------------------------------------
-    // MSE path: append the preloaded blob's bytes seamlessly.
+    // MSE path: bytes are eagerly appended into the SourceBuffer by
+    // preloadNextTrack before the boundary is reached, so the audio element
+    // plays across the boundary without any JS intervention at boundary time.
+    // Here we only update UI state and — for user-triggered skips — seek to
+    // the correct position in the persistent MSE timeline.
     // -----------------------------------------------------------------------
-    if (mse.active && mse.isSupported() && isMp3 && preloadBlob) {
-        console.log(`advanceToPreloaded(${index}): MSE append path`);
-
-        const blobToAppend = preloadBlob;
-        const durationForAppend = preloadedDuration;
-        const prevBlobUrl = preloadBlobUrl;
-
-        // Consume the preload state.
+    if (isMse) {
+        // Consume any pending preload state (blob bytes were already sent to
+        // the SourceBuffer by the eager mse.appendNext in preloadNextTrack).
+        if (preloadBlobUrl) {
+            URL.revokeObjectURL(preloadBlobUrl);
+            preloadBlobUrl = null;
+        }
         preloadBlob = null;
-        preloadBlobUrl = null;
         preloadedDuration = null;
         state.preloadedIndex = -1;
         elements.audioPreload.removeAttribute('src');
         elements.audioPreload.load();
 
-        // Update UI immediately so the lock screen and now-playing reflect the
-        // new track before we await the append.
-        state.currentIndex = index;
-        renderPlaylist();
-        updateNowPlaying(item);
-        registerMediaSessionHandlers();
-        updateMediaSession(item.track, item.artist.name, item.album.name);
-
-        try {
-            await mse.appendNext(blobToAppend, durationForAppend, index);
-            console.log(`advanceToPreloaded(${index}): MSE append complete, offset=${mse.trackOffsets[index]?.toFixed(2)}, duration=${mse.trackDurations[index]?.toFixed(2)}`);
-        } catch (err) {
-            console.warn(`advanceToPreloaded(${index}): MSE append failed — ${err?.message ?? err}`);
-            // If the MSE append fails we have no clean recovery path — tear
-            // down MSE and hand off to playIndex which will start fresh.
-            mse.teardown();
-            preloadBlobUrl && URL.revokeObjectURL(preloadBlobUrl);
-            return playIndex(index);
-        }
-
-        // Revoke the blob URL now that the bytes are in the SourceBuffer.
-        URL.revokeObjectURL(prevBlobUrl);
-
-        // The audio element should continue playing autonomously — the
-        // SourceBuffer now has data beyond the current playhead so no
-        // interruption occurs. Only call play() if it somehow got paused.
-        if (elements.audioController.paused && !state.userPaused) {
-            try {
-                await elements.audioController.play();
-            } catch (err) {
-                console.warn(`advanceToPreloaded(${index}): play() after MSE append rejected — ${err?.message ?? err}`);
-            }
-        }
-
-        // Kick off the next preload immediately.
-        preloadNextTrack();
-
-        // Non-blocking tag hydration.
-        try {
-            const tags = await getTagsFast(item.track);
-            item.track._tags = tags;
-            updateNowPlaying(item);
-            renderTracks();
+        if (mse.isAppended(index)) {
+            // Track is already in the SourceBuffer — seek to its start offset
+            // in the MSE timeline and update UI state.
+            state.currentIndex = index;
+            const trackOffset = mse.trackOffsets[index] ?? 0;
+            elements.audioController.currentTime = trackOffset;
             renderPlaylist();
+            updateNowPlaying(item);
+            registerMediaSessionHandlers();
             updateMediaSession(item.track, item.artist.name, item.album.name);
-        } catch {
-            // tag read failures are non-fatal
+            if (elements.audioController.paused && !state.userPaused) {
+                try {
+                    await elements.audioController.play();
+                } catch (err) {
+                    console.warn(`advanceToPreloaded(${index}): MSE play() rejected \u2014 ${err?.message ?? err}`);
+                }
+            }
+            // Kick off preload + eager append of the track after this one.
+            preloadNextTrack();
+            // Non-blocking tag hydration.
+            try {
+                const tags = await getTagsFast(item.track);
+                item.track._tags = tags;
+                updateNowPlaying(item);
+                renderTracks();
+                renderPlaylist();
+                updateMediaSession(item.track, item.artist.name, item.album.name);
+            } catch {
+                // tag read failures are non-fatal
+            }
+            return;
         }
-        return;
+
+        // Track not yet appended (slow network or user skipped non-sequentially).
+        // Hand off to playIndex which starts a fresh MSE session.
+        console.log(`advanceToPreloaded(${index}): MSE bytes not yet appended \u2014 falling back to playIndex`);
+        return playIndex(index);
+    }
+
+    if (state.preloadedIndex !== index || !preloadBlobUrl) {
+        // No preloaded blob — fall back to normal playIndex().
+        console.log(`advanceToPreloaded(${index}): no blob, falling back to playIndex`);
+        return playIndex(index);
     }
 
     // -----------------------------------------------------------------------
@@ -1661,7 +1683,7 @@ async function advanceToPreloaded(index) {
         await elements.audioController.play();
         console.log(`advanceToPreloaded(${index}): play() succeeded`);
     } catch (err) {
-        console.warn(`advanceToPreloaded(${index}): play() rejected — ${err?.message ?? err}, falling back to playIndex`);
+        console.warn(`advanceToPreloaded(${index}): play() rejected \u2014 ${err?.message ?? err}, falling back to playIndex`);
         return playIndex(index);
     }
 
@@ -1929,6 +1951,18 @@ async function preloadNextTrack() {
         state.preloadedIndex = nextIndex;
         console.log(`Preloaded track ${nextIndex} (blob ready)`);
 
+        // Eagerly append the preloaded blob into the MSE SourceBuffer now, so
+        // the audio element can cross the track boundary autonomously — without
+        // any JS needing to run at the exact moment of the boundary. This is
+        // the critical fix for background playback with the screen off: Android
+        // throttles timeupdate in background tabs, so we cannot rely on it to
+        // trigger the append at boundary time.
+        if (useMse && mse.active) {
+            mse.appendNext(blob, null, nextIndex).catch((err) => {
+                console.warn(`preloadNextTrack: eager MSE append for track ${nextIndex} failed \u2014 ${err?.message ?? err}`);
+            });
+        }
+
         // Warm the server-side transcode cache for the track AFTER next so
         // that when it becomes the preload target, the server responds from
         // disk cache instead of re-transcoding.  Fire-and-forget.
@@ -1967,7 +2001,13 @@ function updateMediaSession(track, artistName, albumName) {
         title,
         artist,
         album,
-        artwork: [{ src: DEFAULT_ARTWORK_URI, sizes: '128x128', type: 'image/svg+xml' }],
+        artwork: DEFAULT_ARTWORK_URI
+            ? [
+                  { src: DEFAULT_ARTWORK_URI, sizes: '96x96', type: 'image/png' },
+                  { src: DEFAULT_ARTWORK_URI, sizes: '192x192', type: 'image/png' },
+                  { src: DEFAULT_ARTWORK_URI, sizes: '512x512', type: 'image/png' },
+              ]
+            : [],
     });
 
     registerMediaSessionHandlers();
@@ -2262,10 +2302,46 @@ async function initializeLibrary() {
             if (curDuration > 0 && rawTime >= curEnd - 0.15) {
                 const nextIdx = curIdx + 1;
                 if (nextIdx < state.playlist.length) {
-                    console.log(`timeupdate: MSE boundary hit — rawTime=${rawTime.toFixed(2)} curEnd=${curEnd.toFixed(2)}, advancing to track ${nextIdx}`);
-                    nextTrack();
+                    // The next track's bytes were already appended eagerly by
+                    // preloadNextTrack, so audio is already playing through the
+                    // boundary without any JS intervention. We only need to
+                    // update the UI to reflect the new current track.
+                    console.log(`timeupdate: MSE boundary \u2014 rawTime=${rawTime.toFixed(2)} curEnd=${curEnd.toFixed(2)}, updating UI to track ${nextIdx}`);
+                    state.currentIndex = nextIdx;
+                    const nextItem = state.playlist[nextIdx];
+                    renderPlaylist();
+                    updateNowPlaying(nextItem);
+                    registerMediaSessionHandlers();
+                    updateMediaSession(nextItem.track, nextItem.artist.name, nextItem.album.name);
+                    // Release consumed preload state and start preloading the
+                    // track after next (and its eager MSE append).
+                    if (preloadBlobUrl) {
+                        URL.revokeObjectURL(preloadBlobUrl);
+                        preloadBlobUrl = null;
+                    }
+                    preloadBlob = null;
+                    preloadedDuration = null;
+                    state.preloadedIndex = -1;
+                    elements.audioPreload.removeAttribute('src');
+                    elements.audioPreload.load();
+                    preloadNextTrack();
+                    // Non-blocking tag hydration for the new current track.
+                    const hydrateItem = nextItem;
+                    const hydrateIdx = nextIdx;
+                    getTagsFast(hydrateItem.track)
+                        .then((tags) => {
+                            hydrateItem.track._tags = tags;
+                            if (state.currentIndex === hydrateIdx) {
+                                updateNowPlaying(hydrateItem);
+                                updateMediaSession(hydrateItem.track, hydrateItem.artist.name, hydrateItem.album.name);
+                                renderPlaylist();
+                            }
+                        })
+                        .catch(() => {});
                 } else if (state.repeatMode === 'all' && state.playlist.length > 0) {
-                    console.log(`timeupdate: MSE boundary hit (repeat-all) — rawTime=${rawTime.toFixed(2)} curEnd=${curEnd.toFixed(2)}, wrapping to track 0`);
+                    // For repeat-all, the MSE timeline does not wrap — tear down
+                    // and restart from track 0 via nextTrack() → playIndex().
+                    console.log(`timeupdate: MSE boundary (repeat-all) \u2014 rawTime=${rawTime.toFixed(2)} curEnd=${curEnd.toFixed(2)}, restarting from track 0`);
                     nextTrack();
                 }
                 // else: last track, no repeat — let it sit; the 'ended' event
