@@ -166,6 +166,7 @@ const mse = {
     trackDurations: [],
     appendedUpTo: -1, // highest playlist index whose bytes are in the SourceBuffer
     _pendingAppend: -1, // playlist index currently being appended (guards against double-appends)
+    _appendRetryTimer: null, // setInterval handle for retrying failed SourceBuffer appends
     _appendQueue: Promise.resolve(),
 
     isSupported() {
@@ -310,56 +311,95 @@ const mse = {
     // a duplicate initialisation — only moof+mdat pairs are appended.
     // -----------------------------------------------------------------------
     async appendNext(blob, duration, playlistIndex) {
-        // Guard against double-appends from concurrent calls (e.g. eager append
-        // in preloadNextTrack races with an explicit advanceToPreloaded call).
+        // Guard against double-appends from concurrent calls.
         if (this.isAppended(playlistIndex) || this._pendingAppend === playlistIndex) {
             console.log(`mse.appendNext: track ${playlistIndex} already appended or in-flight — skipping`);
             return this._appendQueue;
         }
         this._pendingAppend = playlistIndex;
+        try {
+            const prevIndex = playlistIndex - 1;
+            const prevOffset = prevIndex >= 0 ? (this.trackOffsets[prevIndex] ?? 0) : 0;
+            const prevDuration = prevIndex >= 0 ? (this.trackDurations[prevIndex] ?? 0) : 0;
+            const startOffset = prevOffset + prevDuration;
 
-        const prevIndex = playlistIndex - 1;
-        const prevOffset = prevIndex >= 0 ? (this.trackOffsets[prevIndex] ?? 0) : 0;
-        const prevDuration = prevIndex >= 0 ? (this.trackDurations[prevIndex] ?? 0) : 0;
-        const startOffset = prevOffset + prevDuration;
+            const fullAb = await blob.arrayBuffer();
+            const initEnd = this._findInitEnd(fullAb);
+            const mediaOnly = fullAb.slice(initEnd);
+            console.log(`mse.appendNext: stripped ${initEnd} init bytes, appending ${mediaOnly.byteLength} media bytes at offset ${startOffset.toFixed(2)}`);
 
-        const fullAb = await blob.arrayBuffer();
-        const initEnd = this._findInitEnd(fullAb);
-        const mediaOnly = fullAb.slice(initEnd);
-        console.log(`mse.appendNext: stripped ${initEnd} init bytes, appending ${mediaOnly.byteLength} media bytes at offset ${startOffset.toFixed(2)}`);
+            await this._appendBuffer(mediaOnly, playlistIndex, startOffset);
 
-        await this._appendBuffer(mediaOnly, playlistIndex, startOffset);
-        this._pendingAppend = -1;
+            // Append succeeded — clear the retry timer if one was running.
+            if (this._appendRetryTimer !== null) {
+                clearInterval(this._appendRetryTimer);
+                this._appendRetryTimer = null;
+            }
+        } finally {
+            // Always reset so subsequent calls are not permanently blocked.
+            this._pendingAppend = -1;
+        }
     },
 
     // -----------------------------------------------------------------------
     // _appendBuffer — low-level append with timestampOffset.
-    // Waits for the SourceBuffer to be ready, then appends.
+    // Evicts consumed data before appending to reclaim SourceBuffer quota.
+    // On QuotaExceededError, evicts more aggressively and retries once.
+    // On any error the queue chain is reset so future appends are unblocked.
     // -----------------------------------------------------------------------
     _appendBuffer(arrayBuffer, playlistIndex, timestampOffset) {
-        this._appendQueue = this._appendQueue.then(async () => {
-            if (!this.active || !this.sourceBuffer) {
-                return;
-            }
-            await this._waitReady();
-            this.sourceBuffer.timestampOffset = timestampOffset;
-            this.sourceBuffer.appendBuffer(arrayBuffer);
-            await this._waitReady();
-            // Record the offset we promised for this track.
-            this.trackOffsets[playlistIndex] = timestampOffset;
-            // Derive actual duration from what was buffered (most accurate).
-            const buffered = this.sourceBuffer.buffered;
-            let bufferedEnd = timestampOffset;
-            for (let i = 0; i < buffered.length; i++) {
-                if (buffered.end(i) > bufferedEnd) {
-                    bufferedEnd = buffered.end(i);
+        this._appendQueue = this._appendQueue
+            .then(async () => {
+                if (!this.active || !this.sourceBuffer) {
+                    return;
                 }
-            }
-            this.trackDurations[playlistIndex] = bufferedEnd - timestampOffset;
-            this.appendedUpTo = playlistIndex;
-            console.log(`mse._appendBuffer: track ${playlistIndex} offset=${timestampOffset.toFixed(2)} dur=${this.trackDurations[playlistIndex]?.toFixed(2)} bufferedEnd=${bufferedEnd.toFixed(2)}`);
-            this._evict();
-        });
+                // Evict data consumed more than 5 s ago to reclaim quota before
+                // attempting the append. This is especially important on mobile
+                // where the SourceBuffer quota can be as low as ~12 MB.
+                await this._evictAsync(elements.audioController.currentTime - 5);
+
+                await this._waitReady();
+                this.sourceBuffer.timestampOffset = timestampOffset;
+
+                try {
+                    this.sourceBuffer.appendBuffer(arrayBuffer);
+                } catch (err) {
+                    if (err instanceof DOMException && err.name === 'QuotaExceededError') {
+                        // Evict everything consumed up to the current playhead
+                        // and retry once — the first evict pass may not have
+                        // freed enough space if the keepback window was small.
+                        console.warn('mse._appendBuffer: QuotaExceededError — evicting to playhead and retrying');
+                        await this._evictAsync(elements.audioController.currentTime);
+                        await this._waitReady();
+                        this.sourceBuffer.appendBuffer(arrayBuffer);
+                    } else {
+                        throw err;
+                    }
+                }
+
+                await this._waitReady();
+                // Record the offset we promised for this track.
+                this.trackOffsets[playlistIndex] = timestampOffset;
+                // Derive actual duration from what was buffered (most accurate).
+                const buffered = this.sourceBuffer.buffered;
+                let bufferedEnd = timestampOffset;
+                for (let i = 0; i < buffered.length; i++) {
+                    if (buffered.end(i) > bufferedEnd) {
+                        bufferedEnd = buffered.end(i);
+                    }
+                }
+                this.trackDurations[playlistIndex] = bufferedEnd - timestampOffset;
+                this.appendedUpTo = playlistIndex;
+                console.log(
+                    `mse._appendBuffer: track ${playlistIndex} offset=${timestampOffset.toFixed(2)} dur=${this.trackDurations[playlistIndex]?.toFixed(2)} bufferedEnd=${bufferedEnd.toFixed(2)}`,
+                );
+            })
+            .catch((err) => {
+                // Reset the queue chain so future _appendBuffer calls are not
+                // permanently blocked by this rejection.
+                this._appendQueue = Promise.resolve();
+                return Promise.reject(err);
+            });
         return this._appendQueue;
     },
 
@@ -373,20 +413,24 @@ const mse = {
         });
     },
 
-    // Drop buffered data more than 30 s behind current playhead to stay within
-    // browser memory limits on mobile.
-    _evict() {
+    // Asynchronously remove buffered data before `upToTime` to reclaim quota.
+    // Only one remove() operation runs at a time; awaits updateend before returning.
+    async _evictAsync(upToTime) {
         if (!this.sourceBuffer || this.sourceBuffer.updating) {
             return;
         }
-        const audio = elements.audioController;
-        const safeStart = Math.max(0, audio.currentTime - 30);
+        const cutoff = Math.max(0, upToTime);
         const buffered = this.sourceBuffer.buffered;
         for (let i = 0; i < buffered.length; i++) {
             const start = buffered.start(i);
-            if (start < safeStart) {
-                this.sourceBuffer.remove(start, Math.min(safeStart, buffered.end(i)));
-                return; // only one remove at a time
+            const end = buffered.end(i);
+            if (start < cutoff) {
+                const removeEnd = Math.min(cutoff, end);
+                if (removeEnd > start) {
+                    this.sourceBuffer.remove(start, removeEnd);
+                    await this._waitReady();
+                    return; // one range per call
+                }
             }
         }
     },
@@ -397,6 +441,10 @@ const mse = {
         this._appendQueue = Promise.resolve();
         this._initSegment = null;
         this._pendingAppend = -1;
+        if (this._appendRetryTimer !== null) {
+            clearInterval(this._appendRetryTimer);
+            this._appendRetryTimer = null;
+        }
         try {
             if (this.mediaSource) {
                 if (this.mediaSource.readyState === 'open') {
@@ -1946,21 +1994,74 @@ async function preloadNextTrack() {
         preloadBlob = blob;
         const blobUrl = URL.createObjectURL(blob);
         preloadBlobUrl = blobUrl;
-        elements.audioPreload.src = blobUrl;
-        elements.audioPreload.load();
+        // For MSE tracks, we feed bytes directly to the SourceBuffer; loading
+        // the blob into a second <audio> element wastes memory and creates a
+        // duplicate decode buffer that contributes to the mobile quota limit.
+        if (!useMse) {
+            elements.audioPreload.src = blobUrl;
+            elements.audioPreload.load();
+        }
         state.preloadedIndex = nextIndex;
         console.log(`Preloaded track ${nextIndex} (blob ready)`);
 
-        // Eagerly append the preloaded blob into the MSE SourceBuffer now, so
-        // the audio element can cross the track boundary autonomously — without
-        // any JS needing to run at the exact moment of the boundary. This is
-        // the critical fix for background playback with the screen off: Android
-        // throttles timeupdate in background tabs, so we cannot rely on it to
-        // trigger the append at boundary time.
+        // MSE deferred append —————————————————————————————————————————————
+        // We intentionally do NOT append into the SourceBuffer here.  On mobile
+        // the SourceBuffer quota is typically ~12 MB.  A long track (e.g. 7 MB)
+        // can fill the entire quota on its own, leaving no room for the next
+        // track.  Appending immediately would fail with QuotaExceededError.
+        //
+        // Instead we wait until the current track is within 30 s of ending
+        // (see the timeupdate handler below), at which point ~90 % of the
+        // current track's data has been consumed and evicted, leaving plenty
+        // of space.  A setInterval safety net (below) handles the case where
+        // timeupdate is throttled with the screen off (Firefox for Android).
         if (useMse && mse.active) {
-            mse.appendNext(blob, null, nextIndex).catch((err) => {
-                console.warn(`preloadNextTrack: eager MSE append for track ${nextIndex} failed \u2014 ${err?.message ?? err}`);
-            });
+            // Cancel any previous retry timer for a different track.
+            if (mse._appendRetryTimer !== null) {
+                clearInterval(mse._appendRetryTimer);
+                mse._appendRetryTimer = null;
+            }
+
+            const attemptAppend = async () => {
+                // Bail if conditions have changed since the timer was set up.
+                if (!mse.active || mse.isAppended(nextIndex) || state.preloadedIndex !== nextIndex) {
+                    if (mse._appendRetryTimer !== null) {
+                        clearInterval(mse._appendRetryTimer);
+                        mse._appendRetryTimer = null;
+                    }
+                    return;
+                }
+                try {
+                    await mse.appendNext(blob, null, nextIndex);
+                    // Success — clear the timer.
+                    if (mse._appendRetryTimer !== null) {
+                        clearInterval(mse._appendRetryTimer);
+                        mse._appendRetryTimer = null;
+                    }
+                } catch (err) {
+                    const isQuota = err instanceof DOMException && err.name === 'QuotaExceededError';
+                    if (isQuota) {
+                        // Still not enough room — keep the retry timer going.
+                        console.log(`preloadNextTrack: SourceBuffer full for track ${nextIndex} \u2014 will retry (${Math.round(elements.audioController.currentTime)}s played so far)`);
+                        if (mse._appendRetryTimer === null) {
+                            mse._appendRetryTimer = setInterval(attemptAppend, 15000);
+                        }
+                    } else {
+                        console.warn(`preloadNextTrack: MSE append for track ${nextIndex} failed \u2014 ${err?.message ?? err}`);
+                        // Non-quota error — stop retrying.
+                        if (mse._appendRetryTimer !== null) {
+                            clearInterval(mse._appendRetryTimer);
+                            mse._appendRetryTimer = null;
+                        }
+                    }
+                }
+            };
+
+            // The timeupdate handler will fire this at the 30-second mark.
+            // This first call is a no-op on mobile where the buffer is full,
+            // but succeeds immediately on desktop (large quota) or for short
+            // tracks that leave room in the buffer.
+            attemptAppend();
         }
 
         // Warm the server-side transcode cache for the track AFTER next so
@@ -2297,6 +2398,26 @@ async function initializeLibrary() {
             const curOffset = mse.trackOffsets[curIdx] ?? 0;
             const curDuration = mse.trackDurations[curIdx] ?? 0;
             const curEnd = curOffset + curDuration;
+
+            // Deferred MSE append ————————————————————————————————————————
+            // When the current track has < 30 s left and the next track's blob
+            // is ready but not yet in the SourceBuffer, append it now.  At
+            // this point the current track's data is mostly consumed, so the
+            // SourceBuffer has enough free quota to accept the next track.
+            // This is the primary trigger; the setInterval in preloadNextTrack
+            // is the safety net for when timeupdate is throttled with screen off.
+            if (curDuration > 0 && state.preloadedIndex >= 0 && preloadBlob !== null && !mse.isAppended(state.preloadedIndex) && mse._pendingAppend !== state.preloadedIndex) {
+                const timeLeft = curEnd - rawTime;
+                if (timeLeft > 0 && timeLeft <= 30) {
+                    const idxToAppend = state.preloadedIndex;
+                    const blobToAppend = preloadBlob;
+                    console.log(`timeupdate: deferred MSE append for track ${idxToAppend} (${timeLeft.toFixed(1)} s left)`);
+                    mse.appendNext(blobToAppend, null, idxToAppend).catch((err) => {
+                        console.warn(`timeupdate: deferred MSE append failed \u2014 ${err?.message ?? err}`);
+                    });
+                }
+            }
+
             // Use a small tolerance (0.15 s) because timeupdate fires at ~250 ms
             // intervals and the playhead may not land exactly on the boundary.
             if (curDuration > 0 && rawTime >= curEnd - 0.15) {
