@@ -71,6 +71,9 @@ const elements = {
     libraryUser: document.getElementById('library-user'),
     logoutButton: document.getElementById('library-logout'),
     topbar: document.getElementById('library-topbar'),
+    presencePill: document.getElementById('presence-pill'),
+    presencePillCount: document.getElementById('presence-pill-count'),
+    presencePillList: document.getElementById('presence-pill-list'),
 };
 
 const state = {
@@ -920,6 +923,14 @@ function applyNowPlayingScroll() {
 }
 
 function updateNowPlaying(item = null) {
+    // Report presence on every now-playing change. The reporter throttles
+    // duplicate payloads and silently no-ops on transient network errors.
+    try {
+        reportPresence(item);
+    } catch (err) {
+        console.warn('reportPresence threw:', err?.message ?? err);
+    }
+
     if (!item) {
         setNowPlayingText(elements.nowPlayingTitle, '—');
         setNowPlayingText(elements.nowPlayingSub, '—');
@@ -2281,7 +2292,143 @@ async function hydrateLibraryIdentity() {
     if (elements.libraryUser) {
         elements.libraryUser.textContent = `Signed in as ${data.user.user}${data.user.isAdmin ? ' (admin)' : ''}`;
     }
+    state.currentUser = data.user;
 }
+
+// ---------------------------------------------------------------------------
+// Presence reporting / feed — reports what the user is listening to and
+// shows what others are listening to. Uses simple polling (~6s) since the
+// server sits behind Apache which doesn't play nicely with SSE.
+// ---------------------------------------------------------------------------
+let _presenceLastKey = null;
+let _presenceLastSentAt = 0;
+const PRESENCE_POST_THROTTLE_MS = 2000;
+
+function _presenceKeyFor(item) {
+    if (!item) {
+        return 'null';
+    }
+    const title = getTrackTitle(item.track);
+    const artist = getTrackArtist(item.track, item.artist?.name) || item.artist?.name || '';
+    const album = getTrackAlbum(item.track, item.album?.name) || item.album?.name || '';
+    return `${title}\u0000${artist}\u0000${album}`;
+}
+
+function reportPresence(item) {
+    const key = _presenceKeyFor(item);
+    const now = Date.now();
+    if (key === _presenceLastKey && now - _presenceLastSentAt < PRESENCE_POST_THROTTLE_MS) {
+        return;
+    }
+    _presenceLastKey = key;
+    _presenceLastSentAt = now;
+
+    let body;
+    if (item) {
+        body = JSON.stringify({
+            track: getTrackTitle(item.track),
+            artist: getTrackArtist(item.track, item.artist?.name) || item.artist?.name || '',
+            album: getTrackAlbum(item.track, item.album?.name) || item.album?.name || '',
+        });
+    } else {
+        body = JSON.stringify(null);
+    }
+
+    apiFetch(buildUrl('api/nowplaying'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+    }).catch((err) => {
+        console.warn('reportPresence failed:', err?.message ?? err);
+    });
+}
+
+function reportPresenceClear() {
+    reportPresence(null);
+}
+
+const presenceFeed = {
+    _timer: null,
+    _open: false,
+    _listeners: [],
+
+    start() {
+        if (this._timer) {
+            return;
+        }
+        const refresh = () => {
+            this._refresh().catch((err) => {
+                console.warn('presenceFeed refresh failed:', err?.message ?? err);
+            });
+        };
+        refresh();
+        this._timer = setInterval(refresh, 6000);
+        // Refresh promptly when the user returns to the tab.
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                refresh();
+            }
+        });
+        if (elements.presencePill) {
+            const pillButton = elements.presencePill.querySelector('.presence-pill-btn');
+            if (pillButton) {
+                pillButton.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    this._open = !this._open;
+                    this._render();
+                });
+            }
+            document.addEventListener('click', (event) => {
+                if (this._open && !elements.presencePill.contains(event.target)) {
+                    this._open = false;
+                    this._render();
+                }
+            });
+        }
+    },
+
+    async _refresh() {
+        const data = await apiGetJson('api/nowplaying');
+        this._listeners = Array.isArray(data?.listeners) ? data.listeners : [];
+        this._render();
+    },
+
+    _render() {
+        const pill = elements.presencePill;
+        if (!pill) {
+            return;
+        }
+        const count = this._listeners.length;
+        if (count === 0) {
+            pill.classList.add('hidden');
+            this._open = false;
+            return;
+        }
+        pill.classList.remove('hidden');
+        if (elements.presencePillCount) {
+            elements.presencePillCount.textContent = String(count);
+        }
+
+        if (elements.presencePillList) {
+            elements.presencePillList.innerHTML = '';
+            this._listeners.forEach((listener) => {
+                const li = document.createElement('li');
+                li.className = 'presence-pill-item';
+                const name = document.createElement('span');
+                name.className = 'presence-pill-user';
+                name.textContent = listener.user;
+                const detail = document.createElement('span');
+                detail.className = 'presence-pill-track';
+                const trackText = listener.track || '—';
+                const artistText = listener.artist ? ` · ${listener.artist}` : '';
+                detail.textContent = `${trackText}${artistText}`;
+                li.append(name, detail);
+                elements.presencePillList.append(li);
+            });
+        }
+        pill.classList.toggle('open', this._open);
+    },
+};
 
 async function initializeLibrary() {
     if (elements.logoutButton) {
@@ -2477,6 +2624,10 @@ async function initializeLibrary() {
     renderTracks();
     renderPlaylist();
     await hydrateLibraryIdentity();
+
+    presenceFeed.start();
+    window.addEventListener('beforeunload', reportPresenceClear);
+    window.addEventListener('pagehide', reportPresenceClear);
 
     const data = await apiGetJson('artist');
     state.artists = data.artist_list;

@@ -20,6 +20,16 @@
                 <span id="library-user" class="text-muted ms-2"></span>
             </div>
             <div class="d-flex gap-2 library-topbar-actions">
+                <div id="presence-pill" class="presence-pill hidden">
+                    <button type="button" class="presence-pill-btn" aria-label="Other listeners" aria-haspopup="true" aria-expanded="false">
+                        <span class="presence-pill-icon" aria-hidden="true">&#9835;</span>
+                        <span id="presence-pill-count" class="presence-pill-count">0</span>
+                    </button>
+                    <div class="presence-pill-popover" role="menu">
+                        <div class="presence-pill-header">Listening now</div>
+                        <ul id="presence-pill-list" class="presence-pill-list"></ul>
+                    </div>
+                </div>
                 <button
                     id="debug-toggle"
                     class="btn btn-sm btn-outline-secondary"

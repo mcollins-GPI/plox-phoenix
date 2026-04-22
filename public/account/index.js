@@ -7,6 +7,7 @@ const elements = {
     adminLink: document.getElementById('admin-link'),
     passwordForm: document.getElementById('password-form'),
     logoutButton: document.getElementById('logout-button'),
+    sharePresence: document.getElementById('share-presence'),
 };
 
 const state = {
@@ -34,6 +35,10 @@ function render() {
     elements.accountBadge.textContent = isAdmin ? 'Administrator' : 'User';
     elements.accountBadge.className = `badge ${isAdmin ? 'bg-danger' : 'bg-secondary'}`;
     elements.adminLink.classList.toggle('hidden', !isAdmin);
+
+    if (elements.sharePresence) {
+        elements.sharePresence.checked = state.currentUser.sharePresence !== false;
+    }
 }
 
 async function hydrate() {
@@ -72,6 +77,26 @@ elements.logoutButton.addEventListener('click', () => {
     auth.clearToken();
     redirectToLogin();
 });
+
+if (elements.sharePresence) {
+    elements.sharePresence.addEventListener('change', async (event) => {
+        clearAlert();
+        const checked = event.target.checked;
+        try {
+            const data = await auth.api('/api/auth/preferences', {
+                method: 'POST',
+                body: { sharePresence: checked },
+            });
+            state.currentUser = data.user;
+            render();
+            showAlert(checked ? 'Now sharing your listening activity with other users.' : 'Listening activity is now private.');
+        } catch (error) {
+            // Revert checkbox state on failure.
+            event.target.checked = !checked;
+            showAlert(error.message, 'danger');
+        }
+    });
+}
 
 hydrate().catch((error) => {
     showAlert(error.message, 'danger');

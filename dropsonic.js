@@ -247,6 +247,7 @@ function toStoredUserRecord(username, value) {
             enabled: decoded.enabled !== false,
             isAdmin: decoded.isAdmin === true,
             mustChangePassword: decoded.mustChangePassword === true,
+            sharePresence: decoded.sharePresence !== false,
             passwordHash: decoded.passwordHash || '',
             createdAt: decoded.createdAt || null,
             updatedAt: decoded.updatedAt || decoded.createdAt || null,
@@ -261,6 +262,7 @@ function toStoredUserRecord(username, value) {
         enabled: true,
         isAdmin: false,
         mustChangePassword: false,
+        sharePresence: true,
         passwordHash: typeof decoded === 'string' ? decoded : '',
         createdAt: null,
         updatedAt: null,
@@ -276,6 +278,7 @@ function sanitizeUser(user) {
         enabled: user.enabled,
         isAdmin: user.isAdmin,
         mustChangePassword: user.mustChangePassword,
+        sharePresence: user.sharePresence !== false,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
         createdBy: user.createdBy,
@@ -355,6 +358,7 @@ async function saveUser(user) {
         enabled: user.enabled !== false,
         isAdmin: user.isAdmin === true,
         mustChangePassword: user.mustChangePassword === true,
+        sharePresence: user.sharePresence !== false,
         passwordHash: user.passwordHash,
         createdAt: user.createdAt || new Date().toISOString(),
         updatedAt: user.updatedAt || new Date().toISOString(),
@@ -704,6 +708,123 @@ registerAliasedRoute('POST', '/api/auth/password', { preHandler: requireAuth }, 
     } catch (error) {
         reply.code(400).send({ error: error.message });
     }
+});
+
+registerAliasedRoute('POST', '/api/auth/preferences', { preHandler: requireAuth }, async (request, reply) => {
+    try {
+        const updates = {};
+        if (typeof request.body?.sharePresence === 'boolean') {
+            updates.sharePresence = request.body.sharePresence;
+        }
+
+        if (Object.keys(updates).length === 0) {
+            reply.code(400).send({ error: 'No supported preference fields were provided.' });
+            return;
+        }
+
+        const updatedUser = await saveUser({
+            ...request.userRecord,
+            ...updates,
+            updatedAt: new Date().toISOString(),
+            updatedBy: request.userRecord.user,
+        });
+
+        // If the user just turned off presence sharing, drop their entry from
+        // the live map so other clients stop seeing them on the next poll.
+        if (updates.sharePresence === false) {
+            clearPresence(updatedUser.user);
+        }
+
+        reply.send({ user: sanitizeUser(updatedUser) });
+    } catch (error) {
+        reply.code(400).send({ error: error.message });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Now-playing presence — clients POST what they are listening to and poll
+// the GET endpoint to render the "friends listening" widget. State lives in
+// memory only (presence is transient; restarts clear it).
+// ---------------------------------------------------------------------------
+const PRESENCE_STALE_MS = 90 * 1000;
+const presence = new Map();
+
+function clearPresence(username) {
+    if (typeof username === 'string') {
+        presence.delete(username);
+    }
+}
+
+function pruneStalePresence(now = Date.now()) {
+    for (const [username, info] of presence) {
+        if (now - info.updatedAt > PRESENCE_STALE_MS) {
+            presence.delete(username);
+        }
+    }
+}
+
+setInterval(() => pruneStalePresence(), 30 * 1000).unref();
+
+function sanitizePresenceField(value, maxLength = 200) {
+    if (value == null) {
+        return '';
+    }
+    return String(value).slice(0, maxLength).trim();
+}
+
+registerAliasedRoute('POST', '/api/nowplaying', { preHandler: requireAuth }, async (request, reply) => {
+    const username = request.userRecord.user;
+
+    // If this user has opted out, silently no-op so clients don't need to
+    // know about the preference state to function.
+    if (request.userRecord.sharePresence === false) {
+        clearPresence(username);
+        reply.code(204).send();
+        return;
+    }
+
+    const body = request.body;
+    if (body == null || body === false) {
+        clearPresence(username);
+        reply.code(204).send();
+        return;
+    }
+
+    const track = sanitizePresenceField(body.track);
+    if (!track) {
+        clearPresence(username);
+        reply.code(204).send();
+        return;
+    }
+
+    presence.set(username, {
+        user: username,
+        track,
+        artist: sanitizePresenceField(body.artist),
+        album: sanitizePresenceField(body.album),
+        updatedAt: Date.now(),
+    });
+
+    reply.code(204).send();
+});
+
+registerAliasedRoute('GET', '/api/nowplaying', { preHandler: requireAuth }, async (request) => {
+    pruneStalePresence();
+    const me = request.userRecord.user;
+    const listeners = [];
+    for (const info of presence.values()) {
+        if (info.user === me) {
+            continue;
+        }
+        listeners.push({
+            user: info.user,
+            track: info.track,
+            artist: info.artist,
+            album: info.album,
+        });
+    }
+    listeners.sort((left, right) => left.user.localeCompare(right.user));
+    return { listeners };
 });
 
 registerAliasedRoute('GET', '/api/admin/users', { preHandler: requireAdmin }, async () => {
