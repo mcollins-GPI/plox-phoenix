@@ -74,6 +74,9 @@ const elements = {
     presencePill: document.getElementById('presence-pill'),
     presencePillCount: document.getElementById('presence-pill-count'),
     presencePillList: document.getElementById('presence-pill-list'),
+    artistSection: document.getElementById('artist-section'),
+    collectionToggleLibrary: document.getElementById('collection-toggle-library'),
+    collectionToggleIncoming: document.getElementById('collection-toggle-incoming'),
 };
 
 const state = {
@@ -83,6 +86,19 @@ const state = {
     artistSearchQuery: '',
     selectedArtist: null,
     selectedAlbum: null,
+    // Active browsing collection: 'library' (default, /music) or 'incoming' (/incoming).
+    // The incoming collection mirrors the library hierarchy and lives in a parallel
+    // state slice so switching collections preserves each side's selections.
+    collection: 'library',
+    incoming: {
+        artists: [],
+        albums: [],
+        tracks: [],
+        artistSearchQuery: '',
+        selectedArtist: null,
+        selectedAlbum: null,
+        loaded: false,
+    },
     playlist: [],
     currentIndex: -1,
     repeatMode: 'off',
@@ -92,6 +108,18 @@ const state = {
     // true only when the user explicitly clicked pause (vs. a system/browser pause)
     userPaused: false,
 };
+
+// Returns the state slice (artists/albums/tracks/selections/search) for the
+// currently active collection. The library slice lives directly on `state` for
+// backwards compatibility; the incoming slice is nested under `state.incoming`.
+function activeView() {
+    return state.collection === 'incoming' ? state.incoming : state;
+}
+
+// Prefix an API path with `incoming/` when the incoming collection is active.
+function collectionApiPath(suffix) {
+    return state.collection === 'incoming' ? `incoming/${suffix}` : suffix;
+}
 
 // Blob URLs for next-track preloading and the currently active track.
 // Keeping these separate from `state` avoids serialisation surprises.
@@ -1142,8 +1170,9 @@ function renderArtists() {
     clearElement(elements.artistList);
     elements.artistNavigation.forEach((node) => clearElement(node));
 
-    const artists = sortArtists(state.artists);
-    const searchQuery = String(state.artistSearchQuery || '')
+    const view = activeView();
+    const artists = sortArtists(view.artists);
+    const searchQuery = String(view.artistSearchQuery || '')
         .trim()
         .toLowerCase();
     const filteredArtists = artists.filter((artist) => {
@@ -1263,7 +1292,8 @@ function renderArtists() {
 function renderAlbums() {
     clearElement(elements.albumList);
 
-    if (!state.selectedArtist) {
+    const view = activeView();
+    if (!view.selectedArtist) {
         elements.artistSummary.textContent = 'Artist: Select an artist';
         setEmptyState(elements.albumList, 'Albums will appear here.');
         return;
@@ -1285,21 +1315,21 @@ function renderAlbums() {
     headerRow.append(playHeader, addHeader, albumHeader);
     header.append(headerRow);
 
-    elements.artistSummary.textContent = `Artist: ${state.selectedArtist.name}`;
+    elements.artistSummary.textContent = `Artist: ${view.selectedArtist.name}`;
     table.className = 'table table-hover';
 
-    state.albums.forEach((album) => {
+    view.albums.forEach((album) => {
         const row = document.createElement('tr');
         row.className = 'album-row';
-        row.addEventListener('click', () => loadTracks(state.selectedArtist, album));
+        row.addEventListener('click', () => loadTracks(view.selectedArtist, album));
 
         const playCell = document.createElement('td');
         playCell.className = 'action-cell';
-        playCell.append(createMiniButton(ICONS.play, `Play ${album.name}`, () => queueAlbum(state.selectedArtist, album, true)));
+        playCell.append(createMiniButton(ICONS.play, `Play ${album.name}`, () => queueAlbum(view.selectedArtist, album, true)));
 
         const addCell = document.createElement('td');
         addCell.className = 'action-cell';
-        addCell.append(createMiniButton(ICONS.plus, `Add ${album.name}`, () => queueAlbum(state.selectedArtist, album, false)));
+        addCell.append(createMiniButton(ICONS.plus, `Add ${album.name}`, () => queueAlbum(view.selectedArtist, album, false)));
 
         const nameCell = document.createElement('td');
         const albumName = document.createElement('div');
@@ -1319,7 +1349,7 @@ function renderAlbums() {
         body.append(row);
     });
 
-    if (state.albums.length === 0) {
+    if (view.albums.length === 0) {
         setEmptyState(elements.albumList, 'No albums found for this artist.');
         return;
     }
@@ -1331,13 +1361,14 @@ function renderAlbums() {
 function renderTracks() {
     clearElement(elements.trackList);
 
-    if (!state.selectedAlbum) {
+    const view = activeView();
+    if (!view.selectedAlbum) {
         elements.albumTitle.textContent = 'Album: Select an album';
         setEmptyState(elements.trackList, 'Tracks will appear here.');
         return;
     }
 
-    elements.albumTitle.textContent = `Album: ${state.selectedAlbum.name}`;
+    elements.albumTitle.textContent = `Album: ${view.selectedAlbum.name}`;
 
     const table = document.createElement('table');
     const header = document.createElement('thead');
@@ -1360,7 +1391,7 @@ function renderTracks() {
     header.append(headerRow);
     table.className = 'table table-hover';
 
-    state.tracks.forEach((track, index) => {
+    view.tracks.forEach((track, index) => {
         const row = document.createElement('tr');
         row.className = 'track-row';
 
@@ -1370,11 +1401,11 @@ function renderTracks() {
 
         const playCell = document.createElement('td');
         playCell.className = 'action-cell';
-        playCell.append(createMiniButton(ICONS.play, `Play ${track.name}`, () => playTracks([track], state.selectedArtist, state.selectedAlbum)));
+        playCell.append(createMiniButton(ICONS.play, `Play ${track.name}`, () => playTracks([track], view.selectedArtist, view.selectedAlbum)));
 
         const addCell = document.createElement('td');
         addCell.className = 'action-cell';
-        addCell.append(createMiniButton(ICONS.plus, `Add ${track.name}`, () => enqueueTrack(state.selectedArtist, state.selectedAlbum, track)));
+        addCell.append(createMiniButton(ICONS.plus, `Add ${track.name}`, () => enqueueTrack(view.selectedArtist, view.selectedAlbum, track)));
 
         const titleCell = document.createElement('td');
         const title = document.createElement('div');
@@ -1390,7 +1421,7 @@ function renderTracks() {
     table.append(header, body);
     elements.trackList.append(table);
 
-    mapLimit(state.tracks, 4, async (track) => {
+    mapLimit(view.tracks, 4, async (track) => {
         const key = track.path_lower || track.name;
         const refs = rowByPath.get(key);
         if (!refs) {
@@ -2255,7 +2286,7 @@ function previousTrack() {
 }
 
 async function queueAlbum(artist, album, playNow) {
-    const data = await apiGetJson('tracks', { artist: artist.name, album: album.name });
+    const data = await apiGetJson(collectionApiPath('tracks'), { artist: artist.name, album: album.name });
     const tracks = sortTracks(data.track_list);
 
     if (playNow) {
@@ -2266,25 +2297,103 @@ async function queueAlbum(artist, album, playNow) {
 }
 
 async function loadAlbums(artist) {
-    state.selectedArtist = artist;
-    state.selectedAlbum = null;
-    state.tracks = [];
+    const view = activeView();
+    view.selectedArtist = artist;
+    view.selectedAlbum = null;
+    view.tracks = [];
     renderTracks();
     setExpandedSection('album-section');
 
-    const data = await apiGetJson('album', { artist: artist.name });
-    state.albums = sortAlbums(data.album_list);
+    const data = await apiGetJson(collectionApiPath('album'), { artist: artist.name });
+    view.albums = sortAlbums(data.album_list);
     renderAlbums();
 }
 
 async function loadTracks(artist, album) {
-    state.selectedArtist = artist;
-    state.selectedAlbum = album;
+    const view = activeView();
+    view.selectedArtist = artist;
+    view.selectedAlbum = album;
     setExpandedSection('track-section');
 
-    const data = await apiGetJson('tracks', { artist: artist.name, album: album.name });
-    state.tracks = sortTracks(data.track_list);
+    const data = await apiGetJson(collectionApiPath('tracks'), { artist: artist.name, album: album.name });
+    view.tracks = sortTracks(data.track_list);
     renderTracks();
+}
+
+// ---------------------------------------------------------------------------
+// Collection toggle (Library / Incoming) — switches the artist/album/track
+// panels between two parallel collection slices. The incoming collection is
+// fetched lazily on first activation; selections in each side are preserved
+// across switches. The shared playlist is unaffected by the toggle.
+// ---------------------------------------------------------------------------
+async function setCollection(name) {
+    if (name !== 'library' && name !== 'incoming') {
+        return;
+    }
+    if (state.collection === name) {
+        return;
+    }
+
+    state.collection = name;
+    syncCollectionToggleUI();
+
+    // Restore the search input to whatever this collection had typed.
+    const view = activeView();
+    if (elements.artistSearch) {
+        elements.artistSearch.value = view.artistSearchQuery || '';
+    }
+    if (elements.artistSearchClear) {
+        elements.artistSearchClear.classList.toggle('hidden', !(view.artistSearchQuery || '').length);
+    }
+
+    // Render whatever we already have so the UI updates immediately.
+    renderArtists();
+    renderAlbums();
+    renderTracks();
+
+    // Lazy-load the incoming artist list on first activation.
+    if (name === 'incoming' && !state.incoming.loaded) {
+        try {
+            const data = await apiGetJson('incoming/artist');
+            state.incoming.artists = data.artist_list || [];
+            state.incoming.loaded = true;
+            // Only re-render if the user is still viewing incoming.
+            if (state.collection === 'incoming') {
+                renderArtists();
+            }
+        } catch (error) {
+            console.warn('Unable to load incoming artists:', error);
+        }
+    }
+}
+
+function syncCollectionToggleUI() {
+    const isIncoming = state.collection === 'incoming';
+    if (elements.collectionToggleLibrary) {
+        elements.collectionToggleLibrary.classList.toggle('active', !isIncoming);
+        elements.collectionToggleLibrary.setAttribute('aria-selected', String(!isIncoming));
+    }
+    if (elements.collectionToggleIncoming) {
+        elements.collectionToggleIncoming.classList.toggle('active', isIncoming);
+        elements.collectionToggleIncoming.setAttribute('aria-selected', String(isIncoming));
+    }
+    if (elements.artistSection) {
+        elements.artistSection.classList.toggle('collection-incoming', isIncoming);
+    }
+}
+
+function setupCollectionToggle() {
+    syncCollectionToggleUI();
+    if (elements.collectionToggleLibrary) {
+        elements.collectionToggleLibrary.addEventListener('click', () => {
+            setCollection('library');
+        });
+    }
+    if (elements.collectionToggleIncoming) {
+        elements.collectionToggleIncoming.addEventListener('click', () => {
+            setCollection('incoming');
+        });
+    }
 }
 
 async function hydrateLibraryIdentity() {
@@ -2338,9 +2447,13 @@ function reportPresence(item) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body,
-    }).catch((err) => {
-        console.warn('reportPresence failed:', err?.message ?? err);
-    });
+    })
+        .then(() => {
+            console.log('reportPresence: POST ok', body);
+        })
+        .catch((err) => {
+            console.warn('reportPresence failed:', err?.message ?? err);
+        });
 }
 
 function reportPresenceClear() {
@@ -2456,13 +2569,13 @@ async function initializeLibrary() {
 
     if (elements.artistSearch) {
         elements.artistSearch.addEventListener('input', (event) => {
-            state.artistSearchQuery = event.target.value || '';
+            activeView().artistSearchQuery = event.target.value || '';
             renderArtists();
         });
 
         elements.artistSearch.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
-                state.artistSearchQuery = '';
+                activeView().artistSearchQuery = '';
                 elements.artistSearch.value = '';
                 renderArtists();
             }
@@ -2471,7 +2584,7 @@ async function initializeLibrary() {
 
     if (elements.artistSearchClear) {
         elements.artistSearchClear.addEventListener('click', () => {
-            state.artistSearchQuery = '';
+            activeView().artistSearchQuery = '';
             if (elements.artistSearch) {
                 elements.artistSearch.value = '';
                 elements.artistSearch.focus();
@@ -2479,6 +2592,8 @@ async function initializeLibrary() {
             renderArtists();
         });
     }
+
+    setupCollectionToggle();
 
     elements.audioController.addEventListener('ended', () => nextTrack());
 

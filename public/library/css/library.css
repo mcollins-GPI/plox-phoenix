@@ -238,6 +238,45 @@ body {
         inset 0 1px 0 rgba(255, 255, 255, 0.85);
 }
 
+#collection-toggle {
+    display: flex;
+    gap: 4px;
+    padding: 6px var(--artist-controls-padding-inline) 0;
+    background: var(--section-header-surface);
+}
+
+.collection-toggle-btn {
+    flex: 1 1 0;
+    appearance: none;
+    border: 1px solid var(--border);
+    background: linear-gradient(to bottom, #ffffff, #f1f5f9);
+    color: #0f172a;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.collection-toggle-btn:hover {
+    background: var(--accent-soft, rgba(177, 29, 48, 0.08));
+}
+
+.collection-toggle-btn.active {
+    background: #b11d30;
+    color: #ffffff;
+    border-color: #8c1626;
+}
+
+/* When viewing the Incoming collection, tint the artist panel header so the
+   user can tell at a glance they're not in the main library. */
+#artist-section.collection-incoming #collection-summary,
+#artist-section.collection-incoming #artist-count {
+    background: linear-gradient(to bottom, #fff7ed, #ffe9d3);
+}
+
 .artist-navigation {
     font-size: 0.95rem;
     display: flex;

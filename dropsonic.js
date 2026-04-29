@@ -532,9 +532,16 @@ function normalizeEntryNames(entries) {
     }));
 }
 
-function getFolders(artist, album) {
+function getFolders(artist, album, root = '/music') {
     let fileList = [];
-    const searchPath = `${artist ? `${album ? `/music/${artist}/${album}` : `/music/${artist}`}` : '/music'}`;
+    const segments = [root];
+    if (artist) {
+        segments.push(artist);
+        if (album) {
+            segments.push(album);
+        }
+    }
+    const searchPath = segments.join('/');
 
     function getMoreFolders(cursor) {
         return dropbox.filesListFolderContinue({ cursor }).then((response) => {
@@ -774,6 +781,7 @@ function sanitizePresenceField(value, maxLength = 200) {
 
 registerAliasedRoute('POST', '/api/nowplaying', { preHandler: requireAuth }, async (request, reply) => {
     const username = request.userRecord.user;
+    request.log.info({ username, body: request.body, sharePresence: request.userRecord.sharePresence }, 'presence POST');
 
     // If this user has opted out, silently no-op so clients don't need to
     // know about the preference state to function.
@@ -811,6 +819,8 @@ registerAliasedRoute('POST', '/api/nowplaying', { preHandler: requireAuth }, asy
 registerAliasedRoute('GET', '/api/nowplaying', { preHandler: requireAuth }, async (request) => {
     pruneStalePresence();
     const me = request.userRecord.user;
+    const all = Array.from(presence.values()).map((info) => ({ user: info.user, track: info.track, ageMs: Date.now() - info.updatedAt }));
+    request.log.info({ me, presenceMap: all, mapSize: presence.size }, 'presence GET');
     const listeners = [];
     for (const info of presence.values()) {
         if (info.user === me) {
@@ -976,10 +986,62 @@ registerAliasedRoute('GET', '/tracks', { preHandler: requireAuth }, async (reque
     try {
         const artist = request.query.artist || request.headers.artist;
         const album = request.query.album || request.headers.album;
-        const tracks = await getFolders(artist, album, true);
+        const tracks = await getFolders(artist, album);
         reply.send({ track_list: tracks });
     } catch (error) {
         reply.code(500).send({ error: 'Unable to load tracks.' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Incoming collection — a parallel /incoming/{artist}/{album}/{track} tree
+// in Dropbox that mirrors /music. Treated as a small staging area; not cached
+// since freshness is the whole point. Missing root folder returns empty list.
+// ---------------------------------------------------------------------------
+function isDropboxNotFound(error) {
+    const summary = error?.error?.error_summary || error?.error_summary || '';
+    return typeof summary === 'string' && summary.includes('path/not_found');
+}
+
+registerAliasedRoute('GET', '/incoming/artist', { preHandler: requireAuth }, async (request, reply) => {
+    try {
+        const artistList = await getFolders('', '', '/incoming');
+        reply.send({ artist_list: artistList });
+    } catch (error) {
+        if (isDropboxNotFound(error)) {
+            reply.send({ artist_list: [] });
+            return;
+        }
+        reply.code(500).send({ error: 'Unable to load incoming artists.' });
+    }
+});
+
+registerAliasedRoute('GET', '/incoming/album', { preHandler: requireAuth }, async (request, reply) => {
+    try {
+        const artist = request.query.artist || request.headers.artist;
+        const albums = await getFolders(artist, '', '/incoming');
+        reply.send({ album_list: albums });
+    } catch (error) {
+        if (isDropboxNotFound(error)) {
+            reply.send({ album_list: [] });
+            return;
+        }
+        reply.code(500).send({ error: 'Unable to load incoming albums.' });
+    }
+});
+
+registerAliasedRoute('GET', '/incoming/tracks', { preHandler: requireAuth }, async (request, reply) => {
+    try {
+        const artist = request.query.artist || request.headers.artist;
+        const album = request.query.album || request.headers.album;
+        const tracks = await getFolders(artist, album, '/incoming');
+        reply.send({ track_list: tracks });
+    } catch (error) {
+        if (isDropboxNotFound(error)) {
+            reply.send({ track_list: [] });
+            return;
+        }
+        reply.code(500).send({ error: 'Unable to load incoming tracks.' });
     }
 });
 
