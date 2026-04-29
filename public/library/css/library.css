@@ -257,7 +257,10 @@ body {
     padding: 6px 10px;
     border-radius: 6px;
     cursor: pointer;
-    transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+    transition:
+        background 150ms ease,
+        color 150ms ease,
+        border-color 150ms ease;
 }
 
 .collection-toggle-btn:hover {
